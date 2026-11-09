@@ -16,8 +16,8 @@ Mirage evaluates a tile-based approach:
 ```
 +-----------------------------------------------------------------------------------+
 |                                 Application Layer                                 |
-|          (CLI: --enhance, --image-info, --tile-info, --visualize-tiles)           |
-|                Supports --precision <fp32|fp16|mixed> & Error Metrics             |
+|          (CLI: --enhance, --analyze-sensitivity, --image-info, --tile-info)       |
+|            Supports --precision <fp32|fp16|mixed>, Heatmaps & CSV Reports         |
 +------------------------------------------+----------------------------------------+
                                            |
 +------------------------------------------v----------------------------------------+
@@ -46,6 +46,15 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
+|   |             Tile-Based Sensitivity Analyzer (mirage::analysis)            |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   |   | Features: Color Variation (C), Gradient (G), Edge (E), Contrast(L)|   |   |
+|   |   | Weighted Score S = w_c*C + w_g*G + w_e*E + w_l*L in [0.0, 1.0]    |   |   |
+|   |   | Heatmap Visualization (COLORMAP_TURBO) & CSV Report Export        |   |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   +---------------------------------------------------------------------------+   |
+|                                                                                   |
+|   +---------------------------------------------------------------------------+   |
 |   |              Fixed-Precision Enhancement Engine (mirage::enhancement)     |   |
 |   |   +------------------------------------+   +--------------------------+   |   |
 |   |   | Precision Modes: FP32, FP16, Mixed |   | Error Analysis Facility  |   |   |
@@ -65,7 +74,7 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
-|   |         [Future Phases: Sensitivity Analysis, Adaptive Tiling, AVX2]       |   |
+|   |             [Future Phases: Adaptive Precision Selection & AVX2]          |   |
 |   +---------------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------------+
 ```
@@ -190,9 +199,60 @@ To quantitatively evaluate numerical error propagation in reduced precision comp
 5. **Relative Error**:
    $$\text{RelErr} = \frac{\|I_{\text{target}} - I_{\text{ref}}\|_2}{\|I_{\text{ref}}\|_2 + \epsilon}$$
 
-## 6. Future Architectural Roadmap
+## 6. Phase 5 Architecture: Tile-Based Sensitivity Analyzer
 
-- **Phase 5**: Sensitivity Analysis & Tile-Based Adaptive Precision Engine.
-- **Phase 6**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
-- **Phase 7**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
-- **Phase 8**: Interactive Desktop GUI (PySide6) and Continuous Integration.
+Phase 5 introduces the image feature extraction and spatial sensitivity analyzer (`mirage::analysis::SensitivityAnalyzer`) to quantitatively characterize local image dynamics before adaptive precision selection.
+
+> [!NOTE]
+> The sensitivity analyzer calculates and reports local image variation metrics. It **does not assign numerical precision (FP16/FP32)**, which is reserved for subsequent adaptive pipeline phases. Feature weights represent initial experimental parameters rather than established perceptual ground truth.
+
+### 6.1 Sensitivity Feature Formulations
+
+For each spatial tile $T$ containing $N = W \cdot H$ pixels, four normalized features are computed from scientific CIELAB representations ($L^* \in [0, 100], a^*, b^* \in [-127, 127]$):
+
+1. **Color Variation ($C$)**:
+   Measures chromatic dispersion across the $a^*$ and $b^*$ channels:
+   $$\sigma_{a^*} = \sqrt{\frac{1}{N}\sum (a_i^* - \bar{a}^*)^2}, \quad \sigma_{b^*} = \sqrt{\frac{1}{N}\sum (b_i^* - \bar{b}^*)^2}$$
+   $$\sigma_{\text{color}} = \sqrt{\sigma_{a^*}^2 + \sigma_{b^*}^2}$$
+   Normalized against the theoretical maximum chromatic deviation $\sigma_{\text{color, max}} = \sqrt{127^2 + 127^2} \approx 179.605$:
+   $$C = \text{clamp}\left(\frac{\sigma_{\text{color}}}{\sigma_{\text{color, max}}}, 0.0, 1.0\right)$$
+   For neutral or grayscale regions ($a^* = b^* = 0$), $C = 0.0$.
+
+2. **Gradient Magnitude ($G$)**:
+   Measures spatial intensity changes on the $L^*$ channel using the Sobel operator ($3 \times 3$):
+   $$G_{x} = \text{Sobel}_x(L^*), \quad G_{y} = \text{Sobel}_y(L^*)$$
+   $$|\nabla L^*|_i = \sqrt{G_{x, i}^2 + G_{y, i}^2}$$
+   $$\bar{G} = \frac{1}{N} \sum_{i=1}^N |\nabla L^*|_i$$
+   Normalized against the theoretical maximum Sobel 3x3 magnitude for $L^* \in [0, 100]$ ($G_{\max} = \sqrt{400^2 + 400^2} \approx 565.685$):
+   $$G = \text{clamp}\left(\frac{\bar{G}}{G_{\max}}, 0.0, 1.0\right)$$
+
+3. **Edge Density ($E$)**:
+   Computes the proportion of tile pixels crossing a fixed, documented Sobel gradient magnitude threshold ($T_{\text{edge}} = 30.0$ on $L^*$):
+   $$E = \frac{1}{N} \sum_{i=1}^N \mathbf{1}\left(|\nabla L^*|_i \ge T_{\text{edge}}\right), \quad E \in [0.0, 1.0]$$
+
+4. **Local Contrast ($L$)**:
+   Measures luminance spread across the $L^*$ channel:
+   $$\sigma_{L^*} = \sqrt{\frac{1}{N}\sum_{i=1}^N (L_i^* - \bar{L}^*)^2}$$
+   Normalized via Popoviciu's inequality for bounded intervals $[0, 100]$ ($\sigma_{L^*, \max} = \frac{100 - 0}{2} = 50.0$):
+   $$L = \text{clamp}\left(\frac{\sigma_{L^*}}{50.0}, 0.0, 1.0\right)$$
+
+### 6.2 Weighted Sensitivity Combination
+
+The tile sensitivity score $S$ is computed as a convex combination:
+$$S = w_c \cdot C + w_g \cdot G + w_e \cdot E + w_l \cdot L, \quad S \in [0.0, 1.0]$$
+- Constraints: $w_c, w_g, w_e, w_l \ge 0$ and $w_c + w_g + w_e + w_l = 1.0$.
+- Default experimental weights: $w_c = 0.25, w_g = 0.25, w_e = 0.25, w_l = 0.25$.
+- Guaranteed bounded: $S \in [0.0, 1.0]$. Flat or constant images yield $S = 0.0$.
+
+### 6.3 Heatmap Visualization & CSV Export
+
+- **Heatmap Rendering**: Maps sensitivity scores $S \to [0, 255]$ with `COLORMAP_TURBO`, alpha-blended over the original image ($\alpha = 0.55$) with tile boundaries and tile IDs.
+- **Embedded Legend**: Bottom banner includes a colorbar with calibration marks ($0.0$ Low to $1.0$ High).
+- **CSV Serialization**: Dumps `tile_id, x, y, width, height, is_partial, color_variation, gradient_magnitude, edge_density, local_contrast, sensitivity_score`.
+
+## 7. Future Architectural Roadmap
+
+- **Phase 6**: Tile-Based Adaptive Precision Selection (Thresholding, Budget Policies, Tile Dispatch).
+- **Phase 7**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
+- **Phase 8**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
+- **Phase 9**: Interactive Desktop GUI (PySide6) and Continuous Integration.

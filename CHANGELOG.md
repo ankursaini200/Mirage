@@ -5,6 +5,34 @@ All notable changes to **Mirage** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0-alpha] - 2026-11-09
+
+### Added
+- **Tile-Based Sensitivity Analyzer Subsystem (`mirage::analysis::SensitivityAnalyzer`)**:
+  - Implemented 4 standardized, normalized sensitivity features per spatial tile:
+    - **Color Variation ($C$)**: Standard deviation of chromaticity channels ($a^*, b^*$) in scientific CIELAB space, normalized to theoretical maximum $\sigma_{\text{color, max}} = \sqrt{127^2 + 127^2} \approx 179.605$.
+    - **Gradient Magnitude ($G$)**: Mean spatial gradient magnitude using Sobel 3x3 on $L^*$ channel, normalized to theoretical maximum $G_{\max} = \sqrt{400^2 + 400^2} \approx 565.685$.
+    - **Edge Density ($E$)**: Proportion of tile pixels exceeding a fixed, documented Sobel gradient threshold ($T_{\text{edge}} = 30.0$ on $L^*$).
+    - **Local Contrast ($L$)**: Luminance standard deviation of $L^*$ channel, normalized via Popoviciu's bound $\sigma_{L^*, \max} = 50.0$.
+  - Combined weighted sensitivity score ($S = w_c C + w_g G + w_e E + w_l L$) with configurable weights (`SensitivityWeights`, default $0.25$ each summing to $1.0$).
+  - Strict image-independent feature normalization avoiding arbitrary scaling across different image inputs.
+  - Safe handling of zero-variance tiles, flat surfaces, and constant images yielding $S = 0.0$.
+  - Seamless integration with `mirage::image::TileManager` supporting arbitrary nominal tile sizes (8, 16, 32, 64) and partial boundary tiles.
+- **Sensitivity Heatmap Visualization Engine**:
+  - Overlay rendering blending original base image with perceptually uniform `COLORMAP_TURBO` colormap.
+  - Interactive grid outlining with tile ID text annotations.
+  - Bottom colorbar legend detailing score mapping ($0.0$ Low to $1.0$ High).
+  - Persistence via `save_heatmap(path, base_image, report)`.
+- **CSV Data Export**:
+  - Serialization of per-tile metrics (`tile_id, x, y, width, height, is_partial, color_variation, gradient_magnitude, edge_density, local_contrast, sensitivity_score`) via `export_csv(path, report)`.
+- **CLI Extension**:
+  - Added `mirage --analyze-sensitivity <image> --tile-size <size> [--output <heatmap.png>] [--csv <report.csv>]`.
+  - Comprehensive stdout summary reporting dimensions, tile breakdown, min/max/avg sensitivity, and feature averages.
+- **Automated Test Expansion**:
+  - Added `tests/test_sensitivity_analyzer.cpp` with 13 unit tests covering constant images, grayscale zero chromaticity, high color variation, steep gradients, dense edge bars, low contrast, bounded ranges in $[0.0, 1.0]$, weight validation, partial boundary tiles, unique tile IDs, deterministic execution, heatmap generation, and CSV report export.
+  - Added CLI integration tests for missing image and missing tile size parameters.
+  - Total automated unit tests increased to 66 across 9 suites; 11 CTest test cases passing (100%).
+
 ## [0.4.0-alpha] - 2026-11-09
 
 ### Added

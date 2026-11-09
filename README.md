@@ -25,7 +25,7 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 4 — Fixed-Precision Computation Engine
+- **Current Milestone**: Phase 5 — Tile-Based Sensitivity Analyzer
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
@@ -39,9 +39,14 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
     - **Uniform FP16**: Emulated IEEE 754 binary16 arithmetic (`mirage::core::Half`) with round-to-nearest-even (RNTE), normal, subnormal, signed zero, and overflow/underflow handling.
     - **Configurable Mixed Precision**: Per-operation precision assignment (`MixedPrecisionPolicy`).
   - Quantitative error analysis facility measuring Maximum Absolute Error (MAE / $L_\infty$), Mean Absolute Error (MAE / $L_1$), RMSE, PSNR (dB), and Relative Error.
-  - Deterministic processing order ($\text{Brightness} \to \text{Contrast} \to \text{Saturation} \to \text{Gamma}$).
-  - Full automated unit test suite with 53 tests across Google Test and 9 CTest cases.
-- **Future Milestones**: Sensitivity-guided adaptive tiling (Phase 5), AVX2 SIMD kernel acceleration & runtime dispatch (Phase 6), and benchmarks with `perf` profiling (Phase 7).
+  - **Tile-Based Sensitivity Analyzer (`mirage::analysis::SensitivityAnalyzer`)**:
+    - Four standardized, normalized perceptual features per tile: Color Variation ($C$), Gradient Magnitude ($G$), Edge Density ($E$), and Local Contrast ($L$).
+    - Weighted sensitivity combination ($S = w_c C + w_g G + w_e E + w_l L$) with configurable weights.
+    - Sensitivity heatmap visualization with `COLORMAP_TURBO`, tile ID labels, and embedded colorbar legend.
+    - CSV metrics export for offline statistical and research evaluation.
+  - Deterministic processing and strict numerical domain handling.
+  - Full automated unit test suite with 66 tests across Google Test and 11 CTest cases.
+- **Future Milestones**: Adaptive FP16/FP32 precision selection (Phase 6), AVX2 SIMD kernel acceleration & runtime dispatch (Phase 7), and benchmarks with `perf` profiling (Phase 8).
 
 ## 4. Technology Stack
 
@@ -64,6 +69,8 @@ Mirage/
 ├── include/                    # Public API headers
 │   └── mirage/
 │       ├── version.hpp         # Versioning and compiler identification
+│       ├── analysis/
+│       │   └── sensitivity_analyzer.hpp # Tile-based sensitivity analysis & heatmap
 │       ├── core/
 │       │   └── half.hpp        # IEEE 754 binary16 arithmetic type & RNTE rounding
 │       ├── cpu/
@@ -78,6 +85,8 @@ Mirage/
 ├── src/                        # Internal implementations
 │   ├── main.cpp                # CLI application entry point
 │   ├── version.cpp             # Version metadata implementation
+│   ├── analysis/
+│   │   └── sensitivity_analyzer.cpp # Perceptual metrics, heatmap & CSV export
 │   ├── core/
 │   │   └── half.cpp            # IEEE 754 binary16 conversion and emulation logic
 │   ├── cpu/
@@ -98,7 +107,8 @@ Mirage/
 │   ├── test_color_converter.cpp
 │   ├── test_tile_manager.cpp
 │   ├── test_enhancement_engine.cpp
-│   └── test_precision_engine.cpp
+│   ├── test_precision_engine.cpp
+│   └── test_sensitivity_analyzer.cpp
 ├── benchmarks/                 # Microbenchmark suite (Google Benchmark)
 │   └── CMakeLists.txt
 ├── docs/                       # Architectural & development documentation
@@ -182,6 +192,10 @@ cmake --build --preset release
 # Enhance an image using mixed precision (FP16 color operations + FP32 contrast/gamma)
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
   --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
+# Analyze tile-based image sensitivity and generate heatmap visualization and CSV report
+./build/release/mirage --analyze-sensitivity sample_image.png --tile-size 32 \
+  --output output/sensitivity_heatmap.png --csv output/sensitivity_report.csv
 ```
 
 ## 8. Testing Instructions

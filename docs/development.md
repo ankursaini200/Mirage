@@ -68,6 +68,38 @@ cmake --build --preset release
 # 3. Mixed Precision Mode:
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
   --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
+# Tile Sensitivity Analysis
+./build/release/mirage --analyze-sensitivity sample_image.png --tile-size 32 \
+  --output output/sensitivity_heatmap.png --csv output/sensitivity_report.csv
+```
+
+### Sensitivity Analysis CLI Output
+
+```text
+============================================================
+           Mirage Tile-Based Sensitivity Analysis           
+============================================================
+Image filename:          sample_image.png
+Image dimensions:        190 x 130 (3 channels)
+Tile dimensions:         32 x 32
+Grid dimensions:         6 columns x 5 rows
+Total tile count:        30 (20 complete, 10 partial)
+Execution time:          1.42 ms
+------------------------------------------------------------
+Sensitivity Summary (Scores in [0.0, 1.0]):
+  Minimum Sensitivity:   0.006665
+  Maximum Sensitivity:   0.056704
+  Average Sensitivity:   0.038276
+------------------------------------------------------------
+Feature Averages (Weights: C=0.25, G=0.25, E=0.25, L=0.25):
+  Color Variation (C):   0.057488
+  Gradient Magnitude (G):0.007491
+  Edge Density (E):      0.000000
+  Local Contrast (L):    0.088123
+============================================================
+Heatmap visualization saved to: output/sensitivity_heatmap.png
+Tile sensitivity CSV report saved to: output/sensitivity_report.csv
 ```
 
 ### Numerical Error Metrics Output
@@ -111,7 +143,7 @@ ctest --test-dir build/debug --output-on-failure
 
 ## Test Suite Structure
 
-The test suite in `tests/` covers 53 automated tests across 8 test suites:
+The test suite in `tests/` covers 66 automated tests across 9 test suites:
 1. `VersionTest`: Semantic versioning, C++ standard detection, and compiler string reporting.
 2. `CpuFeaturesTest`: CPUID querying, AVX2 availability, OSXSAVE validation, and string formatting.
 3. `HalfPrecisionTest`:
@@ -139,6 +171,20 @@ The test suite in `tests/` covers 53 automated tests across 8 test suites:
    - Mixed-precision policy verification (ensuring mixed error is bounded between FP32 and FP16).
    - Deterministic processing across repeated invocations.
    - String parsing and validation of precision modes.
+9. `SensitivityAnalyzerTest`:
+   - Configurable feature weight validation and sum-to-one constraint.
+   - Uniform-color constant image zero sensitivity across all 4 features.
+   - Grayscale zero chromaticity variation ($C = 0$) with active luminance contrast.
+   - High color variation vs. grayscale checkerboards.
+   - High gradient detection across sharp step edges.
+   - Dense edge bars producing elevated edge density and local contrast.
+   - Low-contrast image verification.
+   - Bounded metric guarantee ($S, C, G, E, L \in [0.0, 1.0]$).
+   - Partial boundary tile handling on non-divisible dimensions.
+   - Unique sequential tile IDs and complete pixel coverage.
+   - Bit-identical deterministic execution across repeated runs.
+   - Heatmap matrix generation, colorbar legend rendering, and image file persistence.
+   - CSV data serialization and header/row integrity verification.
 
 ## Multi-Compiler Validation
 

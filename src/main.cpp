@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+#include "mirage/analysis/sensitivity_analyzer.hpp"
 #include "mirage/cpu/cpu_features.hpp"
 #include "mirage/enhancement/enhancement_engine.hpp"
 #include "mirage/enhancement/precision_config.hpp"
@@ -34,7 +35,12 @@ void print_help(std::string_view program_name) {
               << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
               << "    [--contrast <val>]                Contrast factor >= 0.0 (default: 1.0)\n"
               << "    [--saturation <val>]              Saturation factor >= 0.0 (default: 1.0)\n"
-              << "    [--gamma <val>]                   Gamma exponent > 0.0 (default: 1.0)\n";
+              << "    [--gamma <val>]                   Gamma exponent > 0.0 (default: 1.0)\n\n"
+              << "Sensitivity Analysis Options:\n"
+              << "  --analyze-sensitivity <image_path> --tile-size <size>\n"
+              << "                                      Analyze tile-based image sensitivity\n"
+              << "    [--output <heatmap_path>]         Render and save sensitivity heatmap\n"
+              << "    [--csv <csv_path>]                Export individual tile metrics to CSV\n";
 }
 
 void print_version() {
@@ -155,6 +161,63 @@ int handle_visualize_tiles(const std::filesystem::path& image_path,
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "Error visualizing tiles: " << e.what() << "\n";
+        return 1;
+    }
+}
+
+int handle_analyze_sensitivity(const std::filesystem::path& image_path,
+                               int tile_size,
+                               const std::filesystem::path& output_path,
+                               const std::filesystem::path& csv_path) {
+    if (tile_size <= 0) {
+        std::cerr << "Error: Tile size must be a positive integer.\n";
+        return 1;
+    }
+
+    try {
+        const cv::Mat img = mirage::image::ImageLoader::load(image_path);
+        const cv::Mat norm_img = mirage::image::ImageLoader::normalize_to_float32(img);
+
+        mirage::analysis::SensitivityAnalyzer analyzer{};
+        const auto report = analyzer.analyze(norm_img, tile_size, tile_size);
+
+        std::cout << "============================================================\n"
+                  << "           Mirage Tile-Based Sensitivity Analysis           \n"
+                  << "============================================================\n"
+                  << "Image filename:          " << image_path.filename().string() << "\n"
+                  << "Image dimensions:        " << report.image_width << " x " << report.image_height << " (3 channels)\n"
+                  << "Tile dimensions:         " << report.nominal_tile_width << " x " << report.nominal_tile_height << "\n"
+                  << "Grid dimensions:         " << report.grid_cols << " columns x " << report.grid_rows << " rows\n"
+                  << "Total tile count:        " << report.total_tiles << " ("
+                  << report.complete_tiles << " complete, "
+                  << report.partial_tiles << " partial)\n"
+                  << "Execution time:          " << std::fixed << std::setprecision(2) << report.execution_time_ms << " ms\n"
+                  << "------------------------------------------------------------\n"
+                  << "Sensitivity Summary (Scores in [0.0, 1.0]):\n"
+                  << "  Minimum Sensitivity:   " << std::setprecision(6) << report.min_sensitivity << "\n"
+                  << "  Maximum Sensitivity:   " << report.max_sensitivity << "\n"
+                  << "  Average Sensitivity:   " << report.avg_sensitivity << "\n"
+                  << "------------------------------------------------------------\n"
+                  << "Feature Averages (Weights: C=0.25, G=0.25, E=0.25, L=0.25):\n"
+                  << "  Color Variation (C):   " << report.avg_color_variation << "\n"
+                  << "  Gradient Magnitude (G):" << report.avg_gradient_magnitude << "\n"
+                  << "  Edge Density (E):      " << report.avg_edge_density << "\n"
+                  << "  Local Contrast (L):    " << report.avg_local_contrast << "\n"
+                  << "============================================================\n";
+
+        if (!output_path.empty()) {
+            analyzer.save_heatmap(output_path, img, report);
+            std::cout << "Heatmap visualization saved to: " << output_path.string() << "\n";
+        }
+
+        if (!csv_path.empty()) {
+            analyzer.export_csv(csv_path, report);
+            std::cout << "Tile sensitivity CSV report saved to: " << csv_path.string() << "\n";
+        }
+
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error analyzing sensitivity: " << e.what() << "\n";
         return 1;
     }
 }
@@ -287,6 +350,45 @@ int main(int argc, char* argv[]) {
         } else {
             return handle_tile_info(image_path, tile_size);
         }
+    }
+
+    if (args[0] == "--analyze-sensitivity") {
+        std::filesystem::path image_path;
+        int tile_size = -1;
+        std::filesystem::path output_path;
+        std::filesystem::path csv_path;
+
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--tile-size") {
+                if (i + 1 < args.size()) {
+                    tile_size = parse_tile_size(std::string(args[++i]));
+                }
+            } else if (args[i] == "--output" || args[i] == "-o") {
+                if (i + 1 < args.size()) {
+                    output_path = args[++i];
+                }
+            } else if (args[i] == "--csv") {
+                if (i + 1 < args.size()) {
+                    csv_path = args[++i];
+                }
+            } else if (image_path.empty()) {
+                image_path = args[i];
+            }
+        }
+
+        if (image_path.empty()) {
+            std::cerr << "Error: Missing image path for --analyze-sensitivity\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (tile_size <= 0) {
+            std::cerr << "Error: Please specify a positive tile size using --tile-size <size>\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        return handle_analyze_sensitivity(image_path, tile_size, output_path, csv_path);
     }
 
     if (args[0] == "--enhance") {

@@ -6,7 +6,7 @@
 namespace mirage {
 
 inline constexpr int VERSION_MAJOR = 0;
-inline constexpr int VERSION_MINOR = 4;
+inline constexpr int VERSION_MINOR = 5;
 inline constexpr int VERSION_PATCH = 0;
 inline constexpr std::string_view VERSION_PRERELEASE = "alpha";
 

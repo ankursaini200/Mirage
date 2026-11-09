@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Mirage
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "Adaptive Precision for Software-Based Color Image Enhancement"
     LANGUAGES CXX
 )
@@ -70,6 +70,7 @@ add_library(mirage_core
     src/image/tile_manager.cpp
     src/enhancement/enhancement_engine.cpp
     src/enhancement/precision_config.cpp
+    src/analysis/sensitivity_analyzer.cpp
 )
 add_library(mirage::mirage_core ALIAS mirage_core)
 
