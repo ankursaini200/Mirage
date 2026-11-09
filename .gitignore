@@ -1,0 +1,49 @@
+# Build directories
+build/
+bin/
+lib/
+out/
+.cache/
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake generated files
+CMakeUserPresets.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Profiling and performance outputs
+*.perf
+perf.data*
+gmon.out
+callgrind.out.*
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+env/
+
+# Doxygen documentation output
+docs/html/
+docs/latex/
+docs/xml/
+
+# Benchmark output files
+benchmark_results/
+!CMakePresets.json
+!CMakeUserPresets.json.example

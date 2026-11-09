@@ -1,0 +1,61 @@
+name: Mirage CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.compiler }}, ${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgtest-dev
+
+      - name: Configure CMake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DMIRAGE_BUILD_TESTS=ON \
+            -DMIRAGE_BUILD_BENCHMARKS=OFF \
+            -DMIRAGE_ENABLE_OPENCV=OFF \
+            -DMIRAGE_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: |
+          cmake --build build --parallel
+
+      - name: Run Tests with CTest
+        run: |
+          ctest --test-dir build --output-on-failure
+
+      - name: Test CLI Flags
+        run: |
+          ./build/mirage --help
+          ./build/mirage --version
+          ./build/mirage --info
+
