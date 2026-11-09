@@ -25,7 +25,7 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 5 — Tile-Based Sensitivity Analyzer
+- **Current Milestone**: Phase 6 — Adaptive Precision Decision Engine
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
@@ -38,15 +38,21 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
     - **Uniform FP32**: Bit-exact reference implementation.
     - **Uniform FP16**: Emulated IEEE 754 binary16 arithmetic (`mirage::core::Half`) with round-to-nearest-even (RNTE), normal, subnormal, signed zero, and overflow/underflow handling.
     - **Configurable Mixed Precision**: Per-operation precision assignment (`MixedPrecisionPolicy`).
-  - Quantitative error analysis facility measuring Maximum Absolute Error (MAE / $L_\infty$), Mean Absolute Error (MAE / $L_1$), RMSE, PSNR (dB), and Relative Error.
+  - **Tile-Based Adaptive Precision Decision Engine (`mirage::precision::AdaptivePrecisionEngine`)**:
+    - Sensitivity-guided precision decision policy: assigns FP32 for tiles with $\text{score} \ge \tau$, and FP16 for tiles with $\text{score} < \tau$.
+    - Configurable sensitivity cutoff threshold $\tau \in [0.0, 1.0]$ (default $\tau = 0.04$).
+    - Tile-level dispatch processing each spatial tile in its assigned numerical precision.
+    - Isolated execution timing strictly measuring the adaptive pipeline.
+    - Precision distribution reporting (FP32/FP16 tile counts and percentages).
+  - Quantitative error analysis facility measuring Maximum Absolute Error (MAE / $L_\infty$), Mean Absolute Error (MAE / $L_1$), RMSE, PSNR (dB), Relative $L_2$ Error, and Mean Relative Error.
   - **Tile-Based Sensitivity Analyzer (`mirage::analysis::SensitivityAnalyzer`)**:
     - Four standardized, normalized perceptual features per tile: Color Variation ($C$), Gradient Magnitude ($G$), Edge Density ($E$), and Local Contrast ($L$).
     - Weighted sensitivity combination ($S = w_c C + w_g G + w_e E + w_l L$) with configurable weights.
     - Sensitivity heatmap visualization with `COLORMAP_TURBO`, tile ID labels, and embedded colorbar legend.
     - CSV metrics export for offline statistical and research evaluation.
   - Deterministic processing and strict numerical domain handling.
-  - Full automated unit test suite with 66 tests across Google Test and 11 CTest cases.
-- **Future Milestones**: Adaptive FP16/FP32 precision selection (Phase 6), AVX2 SIMD kernel acceleration & runtime dispatch (Phase 7), and benchmarks with `perf` profiling (Phase 8).
+  - Full automated unit test suite with 83 tests across Google Test and 13 CTest cases.
+- **Future Milestones**: AVX2 SIMD kernel acceleration & safe runtime dispatch (Phase 7), Hardware counter profiling (`perf`) and microbenchmarking (Phase 8), and research analysis.
 
 ## 4. Technology Stack
 
@@ -78,10 +84,12 @@ Mirage/
 │       ├── enhancement/
 │       │   ├── enhancement_engine.hpp # Multi-precision enhancement pipeline
 │       │   └── precision_config.hpp   # Precision modes, policies & error metrics
-│       └── image/
-│           ├── image_loader.hpp # Validating image I/O and normalization
-│           ├── color_converter.hpp # BGR, RGB, and scientific CIELAB conversions
-│           └── tile_manager.hpp # Spatial tiling and image reconstruction
+│       ├── image/
+│       │   ├── image_loader.hpp # Validating image I/O and normalization
+│       │   ├── color_converter.hpp # BGR, RGB, and scientific CIELAB conversions
+│       │   └── tile_manager.hpp # Spatial tiling and image reconstruction
+│       └── precision/
+│           └── adaptive_precision.hpp # Adaptive precision decision & tile dispatch
 ├── src/                        # Internal implementations
 │   ├── main.cpp                # CLI application entry point
 │   ├── version.cpp             # Version metadata implementation
@@ -94,10 +102,12 @@ Mirage/
 │   ├── enhancement/
 │   │   ├── enhancement_engine.cpp # Reference FP32 & FP16 enhancement kernels
 │   │   └── precision_config.cpp   # Error metrics and precision configuration
-│   └── image/
-│       ├── image_loader.cpp    # OpenCV I/O and float normalization
-│       ├── color_converter.cpp # Color transformation algorithms
-│       └── tile_manager.cpp    # Tile partitioning & reconstruction logic
+│   ├── image/
+│   │   ├── image_loader.cpp    # OpenCV I/O and float normalization
+│   │   ├── color_converter.cpp # Color transformation algorithms
+│   │   └── tile_manager.cpp    # Tile partitioning & reconstruction logic
+│   └── precision/
+│       └── adaptive_precision.cpp # Tile precision decision & enhancement pipeline
 ├── tests/                      # Automated unit and integration test suite
 │   ├── CMakeLists.txt
 │   ├── test_version.cpp
@@ -108,7 +118,8 @@ Mirage/
 │   ├── test_tile_manager.cpp
 │   ├── test_enhancement_engine.cpp
 │   ├── test_precision_engine.cpp
-│   └── test_sensitivity_analyzer.cpp
+│   ├── test_sensitivity_analyzer.cpp
+│   └── test_adaptive_precision.cpp
 ├── benchmarks/                 # Microbenchmark suite (Google Benchmark)
 │   └── CMakeLists.txt
 ├── docs/                       # Architectural & development documentation
@@ -192,6 +203,11 @@ cmake --build --preset release
 # Enhance an image using mixed precision (FP16 color operations + FP32 contrast/gamma)
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
   --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
+# Enhance an image using sensitivity-guided tile-based adaptive precision
+./build/release/mirage --enhance sample_image.png --output output/enhanced_adaptive.png \
+  --precision adaptive --tile-size 32 --sensitivity-threshold 0.04 \
+  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
 
 # Analyze tile-based image sensitivity and generate heatmap visualization and CSV report
 ./build/release/mirage --analyze-sensitivity sample_image.png --tile-size 32 \

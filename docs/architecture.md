@@ -55,6 +55,15 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
+|   |         Tile-Based Adaptive Precision Engine (mirage::precision)          |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   |   | Threshold Policy: score >= tau -> FP32, score < tau -> FP16       |   |   |
+|   |   | Precision Distribution: Tile counts & percentages (FP32/FP16)     |   |   |
+|   |   | Tile-Level Multi-Precision Dispatch & Lossless Reconstruction     |   |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   +---------------------------------------------------------------------------+   |
+|                                                                                   |
+|   +---------------------------------------------------------------------------+   |
 |   |              Fixed-Precision Enhancement Engine (mirage::enhancement)     |   |
 |   |   +------------------------------------+   +--------------------------+   |   |
 |   |   | Precision Modes: FP32, FP16, Mixed |   | Error Analysis Facility  |   |   |
@@ -250,9 +259,47 @@ $$S = w_c \cdot C + w_g \cdot G + w_e \cdot E + w_l \cdot L, \quad S \in [0.0, 1
 - **Embedded Legend**: Bottom banner includes a colorbar with calibration marks ($0.0$ Low to $1.0$ High).
 - **CSV Serialization**: Dumps `tile_id, x, y, width, height, is_partial, color_variation, gradient_magnitude, edge_density, local_contrast, sensitivity_score`.
 
-## 7. Future Architectural Roadmap
+## 7. Phase 6 Architecture: Tile-Based Adaptive Precision Decision Engine
 
-- **Phase 6**: Tile-Based Adaptive Precision Selection (Thresholding, Budget Policies, Tile Dispatch).
+Phase 6 implements the closed-loop adaptive precision decision pipeline (`mirage::precision::AdaptivePrecisionEngine`), connecting the perceptual sensitivity analysis from Phase 5 to the multi-precision enhancement kernels from Phase 4.
+
+### 7.1 Decision Policy & Thresholding
+
+Each spatial tile $T_i$ is assigned a numerical execution precision based on its composite sensitivity score $S_i \in [0.0, 1.0]$ evaluated against a configurable threshold $\tau \in [0.0, 1.0]$:
+
+$$\text{Precision}(T_i) = \begin{cases} \text{FP32} & \text{if } S_i \ge \tau \\ \text{FP16} & \text{if } S_i < \tau \end{cases}$$
+
+- **Default Sensitivity Threshold**: $\tau = 0.04$ (configurable via `--sensitivity-threshold <val>`).
+- **Heuristic Interpretation**: High spatial variation or contrast-rich regions receive single-precision (FP32) computation to prevent gamut distortion or cumulative rounding errors, while low-sensitivity regions utilize half-precision (FP16).
+- **Threshold Extremes**:
+  - $\tau = 0.0$: Forces all tiles to FP32, yielding bit-identical output to the uniform FP32 reference baseline with 0.0 error ($PSNR = \infty\text{ dB}$).
+  - $\tau = 1.0$: Forces all tiles to FP16, producing identical results to the uniform FP16 pipeline.
+  - $\tau \in (0.0, 1.0)$: Selects mixed spatial precision, maintaining visual fidelity while evaluating accuracy tradeoffs.
+
+### 7.2 Tile-Level Multi-Precision Dispatch & Reconstruction
+
+The adaptive pipeline executes in five coordinated steps:
+1. **Spatial Decomposition**: `mirage::image::TileManager` partitions the normalized BGR image into $W_{\text{tile}} \times H_{\text{tile}}$ tiles with non-divisible boundary clamping.
+2. **Perceptual Analysis**: Full-image CIELAB conversion and Sobel filtering are computed once, yielding tile-level scores ($C, G, E, L, S$).
+3. **Precision Decision**: `AdaptivePrecisionEngine::decide_precisions` determines tile precision assignments and compiles distribution statistics (`fp32_count`, `fp16_count`, percentages).
+4. **Tile Dispatch**: Each tile's ROI submatrix is processed directly:
+   - FP32 tiles invoke `EnhancementEngine::process(tile_src, tile_dst, config)`
+   - FP16 tiles invoke `EnhancementEngine::process_fp16(tile_src, tile_dst, config)`
+5. **Lossless Image Assembly**: Output ROI submatrices directly map into the pre-allocated destination buffer, guaranteeing zero tile-stitching seam artifacts or pixel duplication.
+
+### 7.3 Performance Timing & Software FP16 Semantics
+
+- **Strict Timing Separation**: The adaptive execution duration (`adaptive_execution_time_ms`) strictly times steps 1 through 5. Baseline FP32 reference generation and error metric computation are evaluated outside the timed block to prevent architectural profiling distortion.
+- **Software-Emulated FP16 Limitation**: Because x86_64 CPUs lack native FP16 vector arithmetic instructions (prior to AVX-512 FP16 / AVX10), half-precision is emulated in software via IEEE 754 binary16 rounding. Consequently, running FP16 in software introduces rounding overhead and does not yield speedup over scalar FP32. Actual runtime gains will be measured when hardware-accelerated SIMD kernels are introduced in Phase 7.
+
+### 7.4 Relative $L_2$ Error Formulation
+
+To evaluate numerical deviation relative to signal energy:
+$$\text{Relative } L_2 \text{ Error} = \frac{\|I_{\text{target}} - I_{\text{ref}}\|_2}{\|I_{\text{ref}}\|_2 + \epsilon} = \frac{\sqrt{\sum (I_{\text{target}}(x, y, c) - I_{\text{ref}}(x, y, c))^2}}{\sqrt{\sum I_{\text{ref}}(x, y, c)^2} + \epsilon}$$
+where $\epsilon = 10^{-10}$ ensures numerical stability without division-by-zero on completely dark images.
+
+## 8. Future Architectural Roadmap
+
 - **Phase 7**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
 - **Phase 8**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
 - **Phase 9**: Interactive Desktop GUI (PySide6) and Continuous Integration.

@@ -69,9 +69,46 @@ cmake --build --preset release
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
   --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
 
+# 4. Sensitivity-Guided Adaptive Precision Mode:
+./build/release/mirage --enhance sample_image.png --output output/enhanced_adaptive.png \
+  --precision adaptive --tile-size 32 --sensitivity-threshold 0.04 \
+  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
 # Tile Sensitivity Analysis
 ./build/release/mirage --analyze-sensitivity sample_image.png --tile-size 32 \
   --output output/sensitivity_heatmap.png --csv output/sensitivity_report.csv
+```
+
+### Adaptive Precision Enhancement CLI Output
+
+```text
+============================================================
+              Mirage Image Enhancement
+============================================================
+Input file:            sample_image.png
+Output file:           output/enhanced_adaptive.png
+Image dimensions:      190 x 130
+Precision Mode:        Adaptive (Sensitivity-Guided Precision Selection)
+Sensitivity Threshold: 0.0400
+Tile Dimensions:       32 x 32
+Brightness:            0.100000
+Contrast:              1.200000
+Saturation:            disabled
+Gamma:                 disabled
+Adaptive Runtime:      87.60 ms
+
+Tile Precision Distribution:
+  Total Tile Count:      30
+  FP32 Tiles:            20 (66.67 %)
+  FP16 Tiles:            10 (33.33 %)
+
+Numerical Error Analysis (vs FP32 Ground Truth Reference):
+Max Absolute Error:  0.000751
+Mean Absolute Error: 0.000026
+RMSE:                0.000087
+PSNR:                81.18 dB
+Relative L2 Error:   0.0131 %
+Mean Relative Error: 0.0071 %
 ```
 
 ### Sensitivity Analysis CLI Output
@@ -143,7 +180,7 @@ ctest --test-dir build/debug --output-on-failure
 
 ## Test Suite Structure
 
-The test suite in `tests/` covers 66 automated tests across 9 test suites:
+The test suite in `tests/` covers 83 automated tests across 10 test suites:
 1. `VersionTest`: Semantic versioning, C++ standard detection, and compiler string reporting.
 2. `CpuFeaturesTest`: CPUID querying, AVX2 availability, OSXSAVE validation, and string formatting.
 3. `HalfPrecisionTest`:
@@ -185,6 +222,21 @@ The test suite in `tests/` covers 66 automated tests across 9 test suites:
    - Bit-identical deterministic execution across repeated runs.
    - Heatmap matrix generation, colorbar legend rendering, and image file persistence.
    - CSV data serialization and header/row integrity verification.
+10. `AdaptivePrecisionTest`:
+    - Threshold cutoff verification: score $< \tau \implies \text{FP16}$, score $\ge \tau \implies \text{FP32}$.
+    - Boundary thresholds: $\tau = 0.0$ forces all FP32; $\tau = 1.0$ forces all FP16.
+    - Invalid threshold handling (negative, $> 1.0$, NaN throwing `AdaptivePrecisionException`).
+    - Deterministic precision decisions across repeated invocations.
+    - Precision distribution invariant: `fp32_count + fp16_count == total_tiles`.
+    - All-FP32 adaptive execution bit-identical to reference FP32 pipeline (0 error, PSNR inf).
+    - All-FP16 adaptive execution bit-identical to uniform FP16 pipeline.
+    - Mixed FP16/FP32 precision behavior with bounded numerical error.
+    - Boundary tile clamping and reconstruction on odd/non-divisible dimensions.
+    - Single-tile handling for images smaller than nominal tile size.
+    - Uniform flat image handling.
+    - Deterministic end-to-end adaptive output.
+    - Preservation of image dimensions and `CV_32FC3` format.
+    - Relative $L_2$ error calculation and zero-reference stability.
 
 ## Multi-Compiler Validation
 

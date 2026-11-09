@@ -11,6 +11,7 @@
 #include "mirage/enhancement/precision_config.hpp"
 #include "mirage/image/image_loader.hpp"
 #include "mirage/image/tile_manager.hpp"
+#include "mirage/precision/adaptive_precision.hpp"
 #include "mirage/version.hpp"
 
 namespace {
@@ -31,7 +32,10 @@ void print_help(std::string_view program_name) {
               << "Enhancement Options:\n"
               << "  --enhance <input_path> --output <output_path>\n"
               << "                                      Run image enhancement pipeline\n"
-              << "    [--precision <fp32|fp16|mixed>]   Numerical precision policy (default: fp32)\n"
+              << "    [--precision <fp32|fp16|mixed|adaptive>]\n"
+              << "                                      Numerical precision policy (default: fp32)\n"
+              << "    [--sensitivity-threshold <val>]   Cutoff for adaptive precision in [0.0, 1.0] (default: 0.04)\n"
+              << "    [--tile-size <size>]              Nominal tile dimensions for adaptive mode (default: 32)\n"
               << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
               << "    [--contrast <val>]                Contrast factor >= 0.0 (default: 1.0)\n"
               << "    [--saturation <val>]              Saturation factor >= 0.0 (default: 1.0)\n"
@@ -279,6 +283,58 @@ int handle_enhance(const std::filesystem::path& input_path,
     }
 }
 
+int handle_enhance_adaptive(const std::filesystem::path& input_path,
+                            const std::filesystem::path& output_path,
+                            const mirage::enhancement::EnhancementConfig& config,
+                            int tile_size,
+                            double threshold) {
+    try {
+        config.validate();
+
+        const cv::Mat u8_in = mirage::image::ImageLoader::load(input_path);
+        const cv::Mat f32_in = mirage::image::ImageLoader::normalize_to_float32(u8_in);
+
+        // Execute adaptive enhancement with isolated timing
+        const auto result = mirage::precision::AdaptivePrecisionEngine::enhance_adaptive(
+            f32_in, config, tile_size, tile_size, threshold);
+
+        // Save output
+        const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(result.enhanced_image);
+        mirage::image::ImageLoader::save(output_path, u8_out);
+
+        // Generate full FP32 reference OUTSIDE the timed section
+        const cv::Mat f32_ref = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+        const mirage::enhancement::ErrorMetrics metrics =
+            mirage::enhancement::compute_error_metrics(f32_ref, result.enhanced_image);
+
+        std::cout << "Image enhancement completed successfully:\n"
+                  << "  Input:                 " << input_path.string() << "\n"
+                  << "  Output:                " << output_path.string() << "\n"
+                  << "  Dimensions:            " << u8_in.cols << " x " << u8_in.rows << "\n"
+                  << "  Precision Mode:        Adaptive (Sensitivity-Guided Precision Selection)\n"
+                  << "  Sensitivity Threshold: " << std::fixed << std::setprecision(4) << threshold << "\n"
+                  << "  Tile Dimensions:       " << tile_size << " x " << tile_size << "\n"
+                  << "  Brightness:            " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
+                  << "  Contrast:              " << (config.enable_contrast ? std::to_string(config.contrast) : "disabled") << "\n"
+                  << "  Saturation:            " << (config.enable_saturation ? std::to_string(config.saturation) : "disabled") << "\n"
+                  << "  Gamma:                 " << (config.enable_gamma ? std::to_string(config.gamma) : "disabled") << "\n"
+                  << "  Adaptive Runtime:      " << std::fixed << std::setprecision(2) << result.adaptive_execution_time_ms << " ms\n\n"
+                  << "Tile Precision Distribution:\n"
+                  << "  Total Tile Count:      " << result.decision.total_tiles << "\n"
+                  << "  FP32 Tiles:            " << result.decision.fp32_count << " ("
+                  << std::setprecision(2) << result.decision.fp32_percentage << " %)\n"
+                  << "  FP16 Tiles:            " << result.decision.fp16_count << " ("
+                  << std::setprecision(2) << result.decision.fp16_percentage << " %)\n\n"
+                  << "Numerical Error Analysis (vs FP32 Ground Truth Reference):\n"
+                  << metrics.to_string() << "\n";
+
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error in adaptive image enhancement: " << e.what() << "\n";
+        return 1;
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -397,6 +453,8 @@ int main(int argc, char* argv[]) {
         mirage::enhancement::EnhancementConfig config{};
         mirage::enhancement::PrecisionMode precision_mode = mirage::enhancement::PrecisionMode::FP32;
         mirage::enhancement::MixedPrecisionPolicy mixed_policy{};
+        int tile_size = 32;
+        double sensitivity_threshold = mirage::precision::DEFAULT_SENSITIVITY_THRESHOLD;
 
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--output" || args[i] == "-o") {
@@ -409,6 +467,19 @@ int main(int argc, char* argv[]) {
                         precision_mode = mirage::enhancement::parse_precision_mode(args[++i]);
                     } catch (const std::exception& e) {
                         std::cerr << "Error: " << e.what() << "\n";
+                        return 1;
+                    }
+                }
+            } else if (args[i] == "--tile-size") {
+                if (i + 1 < args.size()) {
+                    tile_size = parse_tile_size(std::string(args[++i]));
+                }
+            } else if (args[i] == "--sensitivity-threshold") {
+                if (i + 1 < args.size()) {
+                    try {
+                        sensitivity_threshold = std::stod(std::string(args[++i]));
+                    } catch (...) {
+                        std::cerr << "Error: Invalid float value for --sensitivity-threshold\n";
                         return 1;
                     }
                 }
@@ -467,6 +538,18 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error: Missing required --output parameter for --enhance\n";
             print_help(argv[0]);
             return 1;
+        }
+
+        if (precision_mode == mirage::enhancement::PrecisionMode::Adaptive) {
+            if (tile_size <= 0) {
+                std::cerr << "Error: Invalid tile size for adaptive precision.\n";
+                return 1;
+            }
+            if (sensitivity_threshold < 0.0 || sensitivity_threshold > 1.0) {
+                std::cerr << "Error: Sensitivity threshold must be in [0.0, 1.0].\n";
+                return 1;
+            }
+            return handle_enhance_adaptive(input_path, output_path, config, tile_size, sensitivity_threshold);
         }
 
         return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy);

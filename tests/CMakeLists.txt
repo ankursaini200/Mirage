@@ -11,6 +11,7 @@ if(TARGET GTest::gtest AND TARGET GTest::gtest_main)
         test_half.cpp
         test_precision_engine.cpp
         test_sensitivity_analyzer.cpp
+        test_adaptive_precision.cpp
     )
 
     target_link_libraries(mirage_tests
@@ -52,4 +53,10 @@ if(TARGET mirage)
 
     add_test(NAME cli_test_analyze_sensitivity_missing_tile_size COMMAND mirage --analyze-sensitivity dummy.png)
     set_tests_properties(cli_test_analyze_sensitivity_missing_tile_size PROPERTIES WILL_FAIL TRUE)
+
+    add_test(NAME cli_test_enhance_adaptive_invalid_threshold COMMAND mirage --enhance dummy.png --output out.png --precision adaptive --sensitivity-threshold -0.5)
+    set_tests_properties(cli_test_enhance_adaptive_invalid_threshold PROPERTIES WILL_FAIL TRUE)
+
+    add_test(NAME cli_test_enhance_adaptive_invalid_tile_size COMMAND mirage --enhance dummy.png --output out.png --precision adaptive --tile-size -10)
+    set_tests_properties(cli_test_enhance_adaptive_invalid_tile_size PROPERTIES WILL_FAIL TRUE)
 endif()

@@ -5,6 +5,29 @@ All notable changes to **Mirage** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0-alpha] - 2026-11-09
+
+### Added
+- **Tile-Based Adaptive Precision Decision Engine (`mirage::precision::AdaptivePrecisionEngine`)**:
+  - Precision decision policy evaluating tile sensitivity scores from Phase 5 against a configurable threshold:
+    - $\text{score} \ge \text{threshold} \implies \text{FP32}$
+    - $\text{score} < \text{threshold} \implies \text{FP16}$
+  - Configurable sensitivity threshold in $[0.0, 1.0]$ with default $\tau = 0.04$.
+  - Data structures: `TilePrecisionAssignment`, `AdaptivePrecisionDecision`, and `AdaptiveEnhancementResult`.
+  - Tile-based multi-precision dispatch: processes each spatial tile ROI in its assigned numerical precision (FP32 or emulated FP16) and losslessly reconstructs the output image.
+  - Full support for non-divisible dimensions and partial boundary tiles.
+  - Isolated adaptive execution timing strictly measuring the adaptive pipeline (sensitivity analysis, precision decision, per-tile enhancement, image reconstruction) and excluding reference processing and error analysis.
+- **Accuracy Evaluation & Numerical Error Metric Extension**:
+  - Added Relative $L_2$ Error ($\|I_{\text{target}} - I_{\text{ref}}\|_2 / (\|I_{\text{ref}}\|_2 + \epsilon)$) with $\epsilon = 10^{-10}$ to prevent division by zero on zero-reference images.
+- **CLI Enhancements**:
+  - Extended `--enhance` with `--precision adaptive`.
+  - Added `--sensitivity-threshold <val>` (default: `0.04`) and `--tile-size <size>` (default: `32`).
+  - Comprehensive stdout summary reporting precision distribution breakdown (total tiles, FP32 count/percentage, FP16 count/percentage), sensitivity threshold, isolated adaptive runtime, and comparative error metrics vs. the FP32 ground truth reference.
+- **Automated Test Suite Expansion**:
+  - Added `tests/test_adaptive_precision.cpp` containing 17 unit tests covering precision assignment rules, threshold edge cases ($0.0$ and $1.0$), invalid thresholds, determinism, all-FP32 identity, all-FP16 match, mixed precision bounds, partial boundary tiles, small images, uniform images, dimension/type preservation, and relative $L_2$ zero-reference handling.
+  - Added CLI integration tests `cli_test_enhance_adaptive_invalid_threshold` and `cli_test_enhance_adaptive_invalid_tile_size`.
+  - Total automated unit tests increased to 83 across 10 test suites; 13 CTest test cases passing (100%).
+
 ## [0.5.0-alpha] - 2026-11-09
 
 ### Added
