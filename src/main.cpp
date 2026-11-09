@@ -1,7 +1,13 @@
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "mirage/cpu/cpu_features.hpp"
+#include "mirage/image/image_loader.hpp"
+#include "mirage/image/tile_manager.hpp"
 #include "mirage/version.hpp"
 
 namespace {
@@ -9,10 +15,16 @@ namespace {
 void print_help(std::string_view program_name) {
     std::cout << "Usage: " << program_name << " [options]\n\n"
               << "Mirage: " << mirage::PROJECT_DESCRIPTION << "\n\n"
-              << "Available Options:\n"
-              << "  -v, --version  Display Mirage version information\n"
-              << "  -i, --info     Display project, compiler, and hardware environment details\n"
-              << "  -h, --help     Display this help message\n";
+              << "General Options:\n"
+              << "  -v, --version                       Display Mirage version information\n"
+              << "  -i, --info                          Display project, compiler, and hardware details\n"
+              << "  -h, --help                          Display this help message\n\n"
+              << "Image Processing & Tiling Options:\n"
+              << "  --image-info <image_path>           Inspect and display image metadata\n"
+              << "  --tile-info <image_path> --tile-size <size>\n"
+              << "                                      Inspect tile partitioning and boundary tiles\n"
+              << "  --visualize-tiles <image_path> --tile-size <size> [--output <path>]\n"
+              << "                                      Render and save tile grid visualization\n";
 }
 
 void print_version() {
@@ -30,6 +42,114 @@ void print_info() {
               << "AVX2 availability:         " << cpu.avx2_status_string() << "\n";
 }
 
+int handle_image_info(const std::filesystem::path& image_path) {
+    try {
+        const cv::Mat img = mirage::image::ImageLoader::load(image_path);
+        const cv::Mat norm = mirage::image::ImageLoader::normalize_to_float32(img);
+
+        std::cout << "Image filename:        " << image_path.filename().string() << "\n"
+                  << "Image width:           " << img.cols << "\n"
+                  << "Image height:          " << img.rows << "\n"
+                  << "Number of channels:    " << img.channels() << "\n"
+                  << "Original data type:    " << mirage::image::ImageLoader::get_type_description(img.type()) << "\n"
+                  << "Normalized data type:  " << mirage::image::ImageLoader::get_type_description(norm.type()) << "\n"
+                  << "Color representation:  BGR (OpenCV standard 3-channel)\n";
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error inspecting image: " << e.what() << "\n";
+        return 1;
+    }
+}
+
+int parse_tile_size(const std::string& size_str) {
+    try {
+        // Handle either "32" or "32x32"
+        const size_t x_pos = size_str.find('x');
+        if (x_pos != std::string::npos) {
+            return std::stoi(size_str.substr(0, x_pos));
+        }
+        return std::stoi(size_str);
+    } catch (...) {
+        return -1;
+    }
+}
+
+int handle_tile_info(const std::filesystem::path& image_path, int tile_size) {
+    if (tile_size <= 0) {
+        std::cerr << "Error: Tile size must be a positive integer.\n";
+        return 1;
+    }
+
+    try {
+        const cv::Mat img = mirage::image::ImageLoader::load(image_path);
+        const mirage::image::TileManager mgr(img, tile_size, tile_size);
+
+        std::cout << "Image dimensions:            " << mgr.image_width() << " x " << mgr.image_height() << "\n"
+                  << "Tile dimensions:             " << mgr.nominal_tile_width() << " x " << mgr.nominal_tile_height() << "\n"
+                  << "Grid dimensions:             " << mgr.grid_cols() << " columns x " << mgr.grid_rows() << " rows\n"
+                  << "Total tile count:            " << mgr.total_tiles() << "\n"
+                  << "Number of complete tiles:    " << mgr.complete_tiles() << "\n"
+                  << "Number of partial boundary:  " << mgr.partial_tiles() << "\n\n"
+                  << "Individual Tile Coordinates:\n"
+                  << std::left
+                  << std::setw(6)  << "ID"
+                  << std::setw(8)  << "X"
+                  << std::setw(8)  << "Y"
+                  << std::setw(8)  << "Width"
+                  << std::setw(8)  << "Height"
+                  << std::setw(10) << "Status" << "\n"
+                  << std::string(48, '-') << "\n";
+
+        for (const auto& t : mgr.tiles()) {
+            std::cout << std::left
+                      << std::setw(6)  << t.id
+                      << std::setw(8)  << t.x
+                      << std::setw(8)  << t.y
+                      << std::setw(8)  << t.width
+                      << std::setw(8)  << t.height
+                      << std::setw(10) << (t.is_partial ? "Partial" : "Complete")
+                      << "\n";
+        }
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error calculating tile info: " << e.what() << "\n";
+        return 1;
+    }
+}
+
+int handle_visualize_tiles(const std::filesystem::path& image_path,
+                           int tile_size,
+                           const std::filesystem::path& output_path) {
+    if (tile_size <= 0) {
+        std::cerr << "Error: Tile size must be a positive integer.\n";
+        return 1;
+    }
+
+    try {
+        const cv::Mat img = mirage::image::ImageLoader::load(image_path);
+        const mirage::image::TileManager mgr(img, tile_size, tile_size);
+
+        std::filesystem::path dest = output_path;
+        if (dest.empty()) {
+            dest = "output/tile_visualization_" + std::to_string(tile_size) + "x" +
+                   std::to_string(tile_size) + ".png";
+        }
+
+        mgr.save_tile_visualization(dest);
+
+        std::cout << "Tile visualization saved successfully:\n"
+                  << "  Destination:  " << dest.string() << "\n"
+                  << "  Tile size:    " << tile_size << " x " << tile_size << "\n"
+                  << "  Total tiles:  " << mgr.total_tiles() << " ("
+                  << mgr.complete_tiles() << " complete, "
+                  << mgr.partial_tiles() << " partial)\n";
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error visualizing tiles: " << e.what() << "\n";
+        return 1;
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -38,25 +158,72 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    const std::string_view arg{argv[1]};
+    const std::vector<std::string_view> args(argv + 1, argv + argc);
 
-    if (arg == "--version" || arg == "-v") {
+    if (args[0] == "--version" || args[0] == "-v") {
         print_version();
         return 0;
     }
 
-    if (arg == "--info" || arg == "-i") {
+    if (args[0] == "--info" || args[0] == "-i") {
         print_info();
         return 0;
     }
 
-    if (arg == "--help" || arg == "-h") {
+    if (args[0] == "--help" || args[0] == "-h") {
         print_help(argv[0]);
         return 0;
     }
 
-    std::cerr << "Error: Unrecognized option '" << arg << "'\n\n";
+    if (args[0] == "--image-info") {
+        if (args.size() < 2) {
+            std::cerr << "Error: Missing image path for --image-info\n";
+            print_help(argv[0]);
+            return 1;
+        }
+        return handle_image_info(args[1]);
+    }
+
+    if (args[0] == "--tile-info" || args[0] == "--visualize-tiles") {
+        const bool visualize = (args[0] == "--visualize-tiles");
+        std::filesystem::path image_path;
+        int tile_size = -1;
+        std::filesystem::path output_path;
+
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--tile-size") {
+                if (i + 1 < args.size()) {
+                    tile_size = parse_tile_size(std::string(args[++i]));
+                }
+            } else if (args[i] == "--output" || args[i] == "-o") {
+                if (i + 1 < args.size()) {
+                    output_path = args[++i];
+                }
+            } else if (image_path.empty()) {
+                image_path = args[i];
+            }
+        }
+
+        if (image_path.empty()) {
+            std::cerr << "Error: Missing image path.\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (tile_size <= 0) {
+            std::cerr << "Error: Please specify a positive tile size using --tile-size <size>\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (visualize) {
+            return handle_visualize_tiles(image_path, tile_size, output_path);
+        } else {
+            return handle_tile_info(image_path, tile_size);
+        }
+    }
+
+    std::cerr << "Error: Unrecognized option '" << args[0] << "'\n\n";
     print_help(argv[0]);
     return 1;
 }
-

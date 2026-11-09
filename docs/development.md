@@ -1,6 +1,6 @@
 # Developer Guide
 
-This document describes build procedures, compiler flags, code quality standards, and testing workflows for **Mirage**.
+This document describes build procedures, compiler flags, testing workflows, and module usage for **Mirage**.
 
 ## Prerequisites
 
@@ -8,9 +8,10 @@ This document describes build procedures, compiler flags, code quality standards
   - GCC 11+ (GCC 13+ recommended)
   - Clang 14+ (Clang 16+ recommended)
 - **CMake**: Minimum version 3.20 (CMake 3.22+ recommended)
-- **Build System**: Ninja or GNU Make
+- **OpenCV**: OpenCV 4 or OpenCV 5 (`core`, `imgproc`, `imgcodecs`)
 - **Testing**: Google Test (automatically detected via CMake if present)
-- **Optional**: OpenCV 4, Google Benchmark
+- **Build System**: Ninja or GNU Make
+- **Optional**: Google Benchmark
 
 ## Build Workflows
 
@@ -42,6 +43,24 @@ cmake --preset release
 cmake --build --preset release
 ```
 
+## Running the Mirage CLI
+
+```bash
+# Inspect basic system information
+./build/release/mirage --info
+./build/release/mirage --version
+./build/release/mirage --help
+
+# Inspect image metadata (channels, dimensions, bit depth, color space)
+./build/release/mirage --image-info sample_image.png
+
+# Inspect tile partitioning for non-divisible dimensions
+./build/release/mirage --tile-info sample_image.png --tile-size 32
+
+# Render and save tile visualization overlay
+./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
+```
+
 ## Running Tests
 
 All unit tests and CLI integration tests are integrated with CTest:
@@ -53,24 +72,22 @@ ctest --test-dir build/release --output-on-failure
 # Run tests in the debug build
 ctest --test-dir build/debug --output-on-failure
 
-# Using test presets
-ctest --preset release
-ctest --preset debug
+# Run unit tests binary directly for detailed GoogleTest output
+./build/release/tests/mirage_tests
 ```
 
-## Compiler Warnings & Strict Quality Checks
+## Test Suite Structure
 
-Mirage enforces rigorous compiler warning flags (`-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual`).
+The test suite in `tests/` covers:
+1. `VersionTest`: Semantic versioning, C++ standard detection, and compiler string reporting.
+2. `CpuFeaturesTest`: CPUID querying, AVX2 availability, OSXSAVE validation, and string formatting.
+3. `ImageLoaderTest`: File existence checks, supported formats (JPG, PNG, BMP), corrupted and empty file handling, and float normalization.
+4. `ColorConverterTest`: BGR to RGB channel reordering, RGB to BGR symmetry, scientific CIELAB numerical range validity, known reference colors (black, white), and input validation.
+5. `TileManagerTest`: 8x8, 16x16, 32x32, and 64x64 grid divisions, non-divisible image dimensions, boundary tile clamping, single-pixel handling, unique tile IDs, and lossless image reconstruction.
 
-To treat warnings as errors during development:
-```bash
-cmake -B build -DMIRAGE_WARNINGS_AS_ERRORS=ON
-cmake --build build
-```
+## Multi-Compiler Validation
 
-## Testing Compilers
-
-Mirage is developed to be fully compatible with both GCC and Clang:
+Mirage is developed to maintain full compatibility across GCC and Clang:
 
 ```bash
 # Testing with Clang
@@ -83,4 +100,3 @@ cmake -B build/gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release
 cmake --build build/gcc -j$(nproc)
 ctest --test-dir build/gcc --output-on-failure
 ```
-

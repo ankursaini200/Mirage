@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build libgtest-dev
+          sudo apt-get install -y cmake ninja-build libgtest-dev libopencv-dev
 
       - name: Configure CMake
         env:
@@ -42,7 +42,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
             -DMIRAGE_BUILD_TESTS=ON \
             -DMIRAGE_BUILD_BENCHMARKS=OFF \
-            -DMIRAGE_ENABLE_OPENCV=OFF \
+            -DMIRAGE_ENABLE_OPENCV=ON \
             -DMIRAGE_WARNINGS_AS_ERRORS=ON
 
       - name: Build

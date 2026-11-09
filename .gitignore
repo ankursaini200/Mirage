@@ -3,7 +3,9 @@ build/
 bin/
 lib/
 out/
+output/
 .cache/
+sample_image.png
 
 # IDE & Editor artifacts
 .vscode/

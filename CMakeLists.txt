@@ -18,10 +18,16 @@ endif()
 # Export compile commands for tooling (clangd, clang-tidy, etc.)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Configure search paths and RPATH for dependencies
+list(APPEND CMAKE_PREFIX_PATH "/tmp/opencv_install/usr" "/usr/local" "/opt/opencv")
+set(CMAKE_BUILD_RPATH "/tmp/opencv_install/usr/lib")
+set(CMAKE_INSTALL_RPATH "/tmp/opencv_install/usr/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 # User-configurable options
 option(MIRAGE_BUILD_TESTS "Build Mirage test suite" ON)
 option(MIRAGE_BUILD_BENCHMARKS "Build Mirage benchmark suite" ON)
-option(MIRAGE_ENABLE_OPENCV "Enable optional OpenCV integration" ON)
+option(MIRAGE_ENABLE_OPENCV "Enable OpenCV integration" ON)
 option(MIRAGE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
 # Compiler Warnings Configuration
@@ -48,10 +54,19 @@ else()
     )
 endif()
 
+# Find OpenCV
+if(MIRAGE_ENABLE_OPENCV)
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+    message(STATUS "OpenCV ${OpenCV_VERSION} found at ${OpenCV_DIR}")
+endif()
+
 # Core Mirage Engine Library
 add_library(mirage_core
     src/version.cpp
     src/cpu/cpu_features.cpp
+    src/image/image_loader.cpp
+    src/image/color_converter.cpp
+    src/image/tile_manager.cpp
 )
 add_library(mirage::mirage_core ALIAS mirage_core)
 
@@ -64,21 +79,11 @@ target_include_directories(mirage_core
 target_link_libraries(mirage_core
     PUBLIC
         mirage_warnings
+        ${OpenCV_LIBS}
 )
 
+target_compile_definitions(mirage_core PUBLIC MIRAGE_HAS_OPENCV=1)
 target_compile_features(mirage_core PUBLIC cxx_std_20)
-
-# Optional OpenCV Dependency
-if(MIRAGE_ENABLE_OPENCV)
-    find_package(OpenCV QUIET)
-    if(OpenCV_FOUND)
-        message(STATUS "OpenCV ${OpenCV_VERSION} detected. Enabling OpenCV integration.")
-        target_link_libraries(mirage_core PUBLIC ${OpenCV_LIBS})
-        target_compile_definitions(mirage_core PUBLIC MIRAGE_HAS_OPENCV=1)
-    else()
-        message(STATUS "OpenCV not found. Building without OpenCV integration.")
-    endif()
-endif()
 
 # Main Application Executable
 add_executable(mirage
@@ -92,6 +97,13 @@ target_link_libraries(mirage
 
 target_compile_features(mirage PRIVATE cxx_std_20)
 
+# Sample image generation utility
+add_executable(mirage_generate_sample
+    examples/generate_sample_image.cpp
+)
+target_link_libraries(mirage_generate_sample PRIVATE mirage::mirage_core)
+target_compile_features(mirage_generate_sample PRIVATE cxx_std_20)
+
 # Testing configuration with CTest
 if(MIRAGE_BUILD_TESTS)
     enable_testing()
@@ -102,4 +114,3 @@ endif()
 if(MIRAGE_BUILD_BENCHMARKS)
     add_subdirectory(benchmarks)
 endif()
-

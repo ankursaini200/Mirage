@@ -25,22 +25,25 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 1 — Project Foundation
+- **Current Milestone**: Phase 2 — Image Input, Color Conversion, and Tile Management
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
   - Safe, multi-tier CPU feature detection (x86_64 CPUID, OSXSAVE, and XCR0 verification for AVX2 without executing illegal instructions).
-  - Continuous integration workflows for GCC and Clang compilers on Ubuntu.
-  - Automated unit test suite via Google Test and CTest.
-- **Future Milestones**: Core image/tile abstractions (Phase 2), sensitivity analysis (Phase 3), multi-precision kernels (Phase 4), AVX2 SIMD acceleration & runtime dispatch (Phase 5), and benchmarks with `perf` profiling (Phase 6).
+  - Validated image loader supporting JPG, JPEG, PNG, and BMP with corrupted file and empty file rejection.
+  - Color space conversion between BGR, RGB, and scientific floating-point CIELAB ($L^* \in [0, 100]$, $a^*, b^* \in [-127, 127]$).
+  - Spatial tile manager with non-divisible boundary clamping, zero-copy ROI views, and lossless reconstruction.
+  - Tile grid visualization overlays with configurable tile dimensions and border annotations.
+  - Automated unit test suite with 34 tests executed across Google Test and CTest.
+- **Future Milestones**: Sensitivity analysis (Phase 3), multi-precision kernels (Phase 4), AVX2 SIMD acceleration & runtime dispatch (Phase 5), and benchmarks with `perf` profiling (Phase 6).
 
 ## 4. Technology Stack
 
 - **Core Engine**: C++20 (GCC 11+, Clang 14+)
 - **Build System**: CMake 3.20+ (with `CMakePresets.json`)
+- **Computer Vision & Image I/O**: OpenCV 4 / 5 (`core`, `imgproc`, `imgcodecs`)
 - **Testing**: Google Test, CTest
 - **Benchmarking**: Google Benchmark (optional dependency)
-- **Computer Vision**: OpenCV 4 (optional dependency for future image I/O)
 - **Research Evaluation**: Python 3.10+, NumPy (for offline analysis only)
 - **CI / Automation**: GitHub Actions
 
@@ -55,17 +58,28 @@ Mirage/
 ├── include/                    # Public API headers
 │   └── mirage/
 │       ├── version.hpp         # Versioning and compiler identification
-│       └── cpu/
-│           └── cpu_features.hpp # CPU architecture and feature detection
+│       ├── cpu/
+│       │   └── cpu_features.hpp # CPU architecture and feature detection
+│       └── image/
+│           ├── image_loader.hpp # Validating image I/O and normalization
+│           ├── color_converter.hpp # BGR, RGB, and scientific CIELAB conversions
+│           └── tile_manager.hpp # Spatial tiling and image reconstruction
 ├── src/                        # Internal implementations
 │   ├── main.cpp                # CLI application entry point
 │   ├── version.cpp             # Version metadata implementation
-│   └── cpu/
-│       └── cpu_features.cpp    # CPUID and OSXSAVE feature detection
+│   ├── cpu/
+│   │   └── cpu_features.cpp    # CPUID and OSXSAVE feature detection
+│   └── image/
+│       ├── image_loader.cpp    # OpenCV I/O and float normalization
+│       ├── color_converter.cpp # Color transformation algorithms
+│       └── tile_manager.cpp    # Tile partitioning & reconstruction logic
 ├── tests/                      # Automated unit and integration test suite
 │   ├── CMakeLists.txt
 │   ├── test_version.cpp
-│   └── test_cpu_features.cpp
+│   ├── test_cpu_features.cpp
+│   ├── test_image_loader.cpp
+│   ├── test_color_converter.cpp
+│   └── test_tile_manager.cpp
 ├── benchmarks/                 # Microbenchmark suite (Google Benchmark)
 │   └── CMakeLists.txt
 ├── docs/                       # Architectural & development documentation
@@ -83,12 +97,12 @@ Mirage/
 ### Prerequisites (Ubuntu / Debian)
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build libgtest-dev
+sudo apt-get install -y build-essential cmake ninja-build libopencv-dev libgtest-dev
 ```
 
 ### Prerequisites (Arch Linux)
 ```bash
-sudo pacman -S --needed base-devel cmake ninja gtest
+sudo pacman -S --needed base-devel cmake ninja opencv gtest
 ```
 
 ## 7. Build Instructions
@@ -124,14 +138,19 @@ cmake --build --preset release
 ### Running the Mirage Executable
 
 ```bash
-# Display version
+# Display version and hardware information
 ./build/release/mirage --version
-
-# Display system, compiler, and detected CPU capabilities
 ./build/release/mirage --info
-
-# Display help and usage instructions
 ./build/release/mirage --help
+
+# Inspect an image
+./build/release/mirage --image-info sample_image.png
+
+# Inspect tile partitioning for non-divisible dimensions (e.g. 32x32 tiles)
+./build/release/mirage --tile-info sample_image.png --tile-size 32
+
+# Render and save tile visualization overlay
+./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
 ```
 
 ## 8. Testing Instructions
@@ -145,8 +164,8 @@ ctest --test-dir build/release --output-on-failure
 # Run tests against Debug build
 ctest --test-dir build/debug --output-on-failure
 
-# Run tests via CMake presets
-ctest --preset release
+# Run GoogleTest binary directly
+./build/release/tests/mirage_tests
 ```
 
 ## 9. Contribution Guidelines
@@ -157,4 +176,3 @@ Contributions are welcome! Please consult [CONTRIBUTING.md](CONTRIBUTING.md) for
 
 Mirage is released under the [MIT License](LICENSE). Copyright &copy; 2026 Mirage Contributors.
 Third-party dependencies and notices are documented in compliance with their respective open-source licenses.
-
