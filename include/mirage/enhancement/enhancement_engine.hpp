@@ -5,6 +5,8 @@
 
 #include <opencv2/core.hpp>
 
+#include "mirage/enhancement/precision_config.hpp"
+
 namespace mirage::enhancement {
 
 /**
@@ -17,21 +19,21 @@ public:
 };
 
 /**
- * @brief Configuration parameters for uniform FP32 enhancement pipeline.
+ * @brief Configuration parameters for image enhancement.
  */
 struct EnhancementConfig {
     bool enable_brightness = false;
-    float brightness = 0.0f;       ///< Additive delta in [-1.0f, 1.0f], default 0.0f
+    float brightness = 0.0f;        ///< Additive delta in [-1.0f, 1.0f], default 0.0f
 
     bool enable_contrast = false;
-    float contrast = 1.0f;         ///< Multiplicative factor >= 0.0f, default 1.0f
+    float contrast = 1.0f;          ///< Multiplicative factor >= 0.0f, default 1.0f
     float contrast_midpoint = 0.5f; ///< Contrast pivot in [0.0f, 1.0f], default 0.5f
 
     bool enable_saturation = false;
-    float saturation = 1.0f;       ///< Chroma scale factor >= 0.0f, default 1.0f (0.0 = grayscale)
+    float saturation = 1.0f;        ///< Chroma scale factor >= 0.0f, default 1.0f (0.0 = grayscale)
 
     bool enable_gamma = false;
-    float gamma = 1.0f;            ///< Power-law exponent > 0.0f, default 1.0f
+    float gamma = 1.0f;             ///< Power-law exponent > 0.0f, default 1.0f
 
     /**
      * @brief Validates parameter ranges, throwing EnhancementException on error.
@@ -40,11 +42,12 @@ struct EnhancementConfig {
 };
 
 /**
- * @brief Baseline uniform FP32 color image enhancement engine.
+ * @brief Color image enhancement engine supporting FP32, emulated FP16, and Mixed precision.
  *
- * Serves as the numerical reference implementation for future adaptive precision
- * and SIMD kernels. Operates exclusively on normalized CV_32FC3 BGR image data
- * with output clamped strictly to [0.0f, 1.0f].
+ * Provides:
+ * - FP32 Reference Implementation (Phase 3 baseline).
+ * - FP16 Emulation with explicit IEEE 754 binary16 rounding at arithmetic boundaries.
+ * - Mixed Precision execution where operations are individually assigned to FP32 or FP16.
  *
  * Mathematical Definitions:
  * 1. Brightness:  I_out = clamp(I_in + delta, 0.0f, 1.0f)
@@ -52,55 +55,57 @@ struct EnhancementConfig {
  * 3. Saturation:  Y = 0.114*B + 0.587*G + 0.299*R; C_out = clamp(Y + factor * (C_in - Y), 0.0f, 1.0f)
  * 4. Gamma:       I_out = clamp(I_in ^ (1.0f / gamma), 0.0f, 1.0f)
  *
- * Processing Order in Combined Pipeline:
- * Brightness -> Contrast -> Saturation -> Gamma
+ * Processing Sequence: Brightness -> Contrast -> Saturation -> Gamma
  */
 class EnhancementEngine {
 public:
-    /**
-     * @brief Applies additive brightness adjustment.
-     * @param src Input CV_32FC3 image.
-     * @param delta Additive offset in [-1.0f, 1.0f].
-     */
+    // --- FP32 Reference Kernels ---
     [[nodiscard]] static cv::Mat adjust_brightness(const cv::Mat& src, float delta);
     static void adjust_brightness(const cv::Mat& src, cv::Mat& dst, float delta);
 
-    /**
-     * @brief Applies contrast adjustment around a pivot midpoint.
-     * @param src Input CV_32FC3 image.
-     * @param factor Contrast multiplier >= 0.0f (1.0 = identity).
-     * @param midpoint Neutral luminance anchor point (default 0.5f).
-     */
     [[nodiscard]] static cv::Mat adjust_contrast(const cv::Mat& src, float factor, float midpoint = 0.5f);
     static void adjust_contrast(const cv::Mat& src, cv::Mat& dst, float factor, float midpoint = 0.5f);
 
-    /**
-     * @brief Applies saturation adjustment while preserving perceptual luminance and grayscale values.
-     * @param src Input CV_32FC3 image.
-     * @param factor Saturation multiplier >= 0.0f (0.0 = pure grayscale, 1.0 = identity).
-     */
     [[nodiscard]] static cv::Mat adjust_saturation(const cv::Mat& src, float factor);
     static void adjust_saturation(const cv::Mat& src, cv::Mat& dst, float factor);
 
-    /**
-     * @brief Applies power-law gamma transformation (I_out = I_in ^ (1 / gamma)).
-     * @param src Input CV_32FC3 image.
-     * @param gamma Exponent strictly greater than 0.0f (1.0 = identity).
-     */
     [[nodiscard]] static cv::Mat adjust_gamma(const cv::Mat& src, float gamma);
     static void adjust_gamma(const cv::Mat& src, cv::Mat& dst, float gamma);
 
-    /**
-     * @brief Executes the complete enhancement pipeline with enabled operations.
-     */
     [[nodiscard]] static cv::Mat process(const cv::Mat& src, const EnhancementConfig& config);
     static void process(const cv::Mat& src, cv::Mat& dst, const EnhancementConfig& config);
 
-    /**
-     * @brief Validates that the input image is non-empty, has 3 channels, and is CV_32FC3.
-     */
+    // --- FP16 Emulated Kernels (Explicit IEEE 754 binary16 rounding) ---
+    [[nodiscard]] static cv::Mat adjust_brightness_fp16(const cv::Mat& src, float delta);
+    static void adjust_brightness_fp16(const cv::Mat& src, cv::Mat& dst, float delta);
+
+    [[nodiscard]] static cv::Mat adjust_contrast_fp16(const cv::Mat& src, float factor, float midpoint = 0.5f);
+    static void adjust_contrast_fp16(const cv::Mat& src, cv::Mat& dst, float factor, float midpoint = 0.5f);
+
+    [[nodiscard]] static cv::Mat adjust_saturation_fp16(const cv::Mat& src, float factor);
+    static void adjust_saturation_fp16(const cv::Mat& src, cv::Mat& dst, float factor);
+
+    [[nodiscard]] static cv::Mat adjust_gamma_fp16(const cv::Mat& src, float gamma);
+    static void adjust_gamma_fp16(const cv::Mat& src, cv::Mat& dst, float gamma);
+
+    [[nodiscard]] static cv::Mat process_fp16(const cv::Mat& src, const EnhancementConfig& config);
+    static void process_fp16(const cv::Mat& src, cv::Mat& dst, const EnhancementConfig& config);
+
+    // --- Configurable Multi-Precision Pipeline ---
+    [[nodiscard]] static cv::Mat process_with_precision(
+        const cv::Mat& src,
+        const EnhancementConfig& config,
+        PrecisionMode mode = PrecisionMode::FP32,
+        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{});
+
+    static void process_with_precision(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        const EnhancementConfig& config,
+        PrecisionMode mode = PrecisionMode::FP32,
+        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{});
+
     static void validate_image(const cv::Mat& image, const std::string& operation_name);
 };
 
 }  // namespace mirage::enhancement
-

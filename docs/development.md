@@ -56,9 +56,42 @@ cmake --build --preset release
 ./build/release/mirage --tile-info sample_image.png --tile-size 32
 ./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
 
-# Image Enhancement (Uniform FP32 Reference Baseline)
-./build/release/mirage --enhance sample_image.png --output output/enhanced.png \
-  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+# Image Enhancement with Configurable Precision
+# 1. Uniform FP32 Reference Mode:
+./build/release/mirage --enhance sample_image.png --output output/enhanced_fp32.png \
+  --precision fp32 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
+# 2. Uniform FP16 Emulated Mode (with automated error metrics vs FP32):
+./build/release/mirage --enhance sample_image.png --output output/enhanced_fp16.png \
+  --precision fp16 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+
+# 3. Mixed Precision Mode:
+./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
+  --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+```
+
+### Numerical Error Metrics Output
+
+When running with `--precision fp16` or `--precision mixed`, the CLI automatically computes the quantitative error metrics against the bit-exact FP32 reference:
+
+```text
+============================================================
+              Mirage Image Enhancement
+============================================================
+Input file:         sample_image.png
+Output file:        output/enhanced_fp16.png
+Image dimensions:   512x512 (3 channels)
+Precision mode:     FP16
+Pipeline sequence:  Brightness -> Contrast -> Saturation -> Gamma
+Execution status:   SUCCESS (Image saved)
+------------------------------------------------------------
+Numerical Error Analysis (vs FP32 Reference):
+  Max Absolute Error:     0.00195312
+  Mean Absolute Error:    0.00032145
+  Root Mean Square Error: 0.00041230
+  PSNR:                   67.69 dB
+  Relative Error:         0.00078234
+============================================================
 ```
 
 ## Running Tests
@@ -78,13 +111,21 @@ ctest --test-dir build/debug --output-on-failure
 
 ## Test Suite Structure
 
-The test suite in `tests/` covers 41 automated tests across 6 test suites:
+The test suite in `tests/` covers 53 automated tests across 8 test suites:
 1. `VersionTest`: Semantic versioning, C++ standard detection, and compiler string reporting.
 2. `CpuFeaturesTest`: CPUID querying, AVX2 availability, OSXSAVE validation, and string formatting.
-3. `ImageLoaderTest`: File existence checks, supported formats (JPG, PNG, BMP), corrupted and empty file handling, and float normalization.
-4. `ColorConverterTest`: BGR to RGB channel reordering, RGB to BGR symmetry, scientific CIELAB numerical range validity, known reference colors (black, white), and input validation.
-5. `TileManagerTest`: 8x8, 16x16, 32x32, and 64x64 grid divisions, non-divisible image dimensions, boundary tile clamping, single-pixel handling, unique tile IDs, and lossless image reconstruction.
-6. `EnhancementEngineTest`:
+3. `HalfPrecisionTest`:
+   - Exact IEEE 754 binary16 bit conversions for normal and special values.
+   - Subnormal numbers down to $2^{-24} \approx 5.96 \times 10^{-8}$.
+   - Round-to-nearest, ties-to-even (RNTE) rounding at exact tie thresholds.
+   - Signed zeros ($+0.0$ and $-0.0$ with distinct sign bit preservation).
+   - Numerical overflow to $\pm\infty$ and underflow to zero.
+   - Quiet and signaling NaN preservation.
+   - Emulated arithmetic operations (`+`, `-`, `*`, `/`).
+4. `ImageLoaderTest`: File existence checks, supported formats (JPG, PNG, BMP), corrupted and empty file handling, and float normalization.
+5. `ColorConverterTest`: BGR to RGB channel reordering, RGB to BGR symmetry, scientific CIELAB numerical range validity, known reference colors (black, white), and input validation.
+6. `TileManagerTest`: 8x8, 16x16, 32x32, and 64x64 grid divisions, non-divisible image dimensions, boundary tile clamping, single-pixel handling, unique tile IDs, and lossless image reconstruction.
+7. `EnhancementEngineTest`:
    - Additive brightness adjustment and upper/lower boundary clamping.
    - Contrast enhancement around neutral midpoint ($M = 0.5$).
    - Luminance-preserving saturation adjustment and grayscale neutral invariance.
@@ -92,6 +133,12 @@ The test suite in `tests/` covers 41 automated tests across 6 test suites:
    - Parameter range validation (rejecting negative contrast, gamma $\le 0$, etc.).
    - Output dimension and `CV_32FC3` type preservation.
    - Deterministic and bit-identical repeated execution.
+8. `PrecisionEngineTest`:
+   - Exact identity between FP32 mode and reference FP32 pipeline.
+   - FP16 bounded numerical error (demonstrating non-zero rounding error, MAE $< 0.005$, and PSNR $> 50$ dB).
+   - Mixed-precision policy verification (ensuring mixed error is bounded between FP32 and FP16).
+   - Deterministic processing across repeated invocations.
+   - String parsing and validation of precision modes.
 
 ## Multi-Compiler Validation
 

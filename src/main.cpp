@@ -7,6 +7,7 @@
 
 #include "mirage/cpu/cpu_features.hpp"
 #include "mirage/enhancement/enhancement_engine.hpp"
+#include "mirage/enhancement/precision_config.hpp"
 #include "mirage/image/image_loader.hpp"
 #include "mirage/image/tile_manager.hpp"
 #include "mirage/version.hpp"
@@ -28,7 +29,8 @@ void print_help(std::string_view program_name) {
               << "                                      Render and save tile grid visualization\n\n"
               << "Enhancement Options:\n"
               << "  --enhance <input_path> --output <output_path>\n"
-              << "                                      Run uniform FP32 baseline enhancement pipeline\n"
+              << "                                      Run image enhancement pipeline\n"
+              << "    [--precision <fp32|fp16|mixed>]   Numerical precision policy (default: fp32)\n"
               << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
               << "    [--contrast <val>]                Contrast factor >= 0.0 (default: 1.0)\n"
               << "    [--saturation <val>]              Saturation factor >= 0.0 (default: 1.0)\n"
@@ -159,26 +161,54 @@ int handle_visualize_tiles(const std::filesystem::path& image_path,
 
 int handle_enhance(const std::filesystem::path& input_path,
                    const std::filesystem::path& output_path,
-                   const mirage::enhancement::EnhancementConfig& config) {
+                   const mirage::enhancement::EnhancementConfig& config,
+                   mirage::enhancement::PrecisionMode mode,
+                   const mirage::enhancement::MixedPrecisionPolicy& policy) {
     try {
         config.validate();
 
         const cv::Mat u8_in = mirage::image::ImageLoader::load(input_path);
         const cv::Mat f32_in = mirage::image::ImageLoader::normalize_to_float32(u8_in);
 
-        const cv::Mat f32_out = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+        // Compute output using selected precision mode
+        const cv::Mat f32_out = mirage::enhancement::EnhancementEngine::process_with_precision(
+            f32_in, config, mode, policy);
         const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(f32_out);
 
         mirage::image::ImageLoader::save(output_path, u8_out);
 
+        std::string mode_desc;
+        if (mode == mirage::enhancement::PrecisionMode::FP32) {
+            mode_desc = "FP32 (IEEE 754 binary32 reference)";
+        } else if (mode == mirage::enhancement::PrecisionMode::FP16) {
+            mode_desc = "FP16 (Emulated IEEE 754 binary16 arithmetic)";
+        } else {
+            mode_desc = "Mixed Precision (Brightness: " + std::string(to_string(policy.brightness)) +
+                        ", Contrast: " + std::string(to_string(policy.contrast)) +
+                        ", Saturation: " + std::string(to_string(policy.saturation)) +
+                        ", Gamma: " + std::string(to_string(policy.gamma)) + ")";
+        }
+
         std::cout << "Image enhancement completed successfully:\n"
-                  << "  Input:        " << input_path.string() << "\n"
-                  << "  Output:       " << output_path.string() << "\n"
-                  << "  Dimensions:   " << u8_in.cols << " x " << u8_in.rows << "\n"
-                  << "  Brightness:   " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
-                  << "  Contrast:     " << (config.enable_contrast ? std::to_string(config.contrast) : "disabled") << "\n"
-                  << "  Saturation:   " << (config.enable_saturation ? std::to_string(config.saturation) : "disabled") << "\n"
-                  << "  Gamma:        " << (config.enable_gamma ? std::to_string(config.gamma) : "disabled") << "\n";
+                  << "  Input:               " << input_path.string() << "\n"
+                  << "  Output:              " << output_path.string() << "\n"
+                  << "  Dimensions:          " << u8_in.cols << " x " << u8_in.rows << "\n"
+                  << "  Precision Mode:      " << mode_desc << "\n"
+                  << "  Brightness:          " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
+                  << "  Contrast:            " << (config.enable_contrast ? std::to_string(config.contrast) : "disabled") << "\n"
+                  << "  Saturation:          " << (config.enable_saturation ? std::to_string(config.saturation) : "disabled") << "\n"
+                  << "  Gamma:               " << (config.enable_gamma ? std::to_string(config.gamma) : "disabled") << "\n";
+
+        // If running in FP16 or Mixed mode, compute quantitative error metrics against FP32 reference
+        if (mode != mirage::enhancement::PrecisionMode::FP32) {
+            const cv::Mat f32_ref = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+            const mirage::enhancement::ErrorMetrics metrics =
+                mirage::enhancement::compute_error_metrics(f32_ref, f32_out);
+
+            std::cout << "\nNumerical Error Analysis (vs FP32 Ground Truth Reference):\n"
+                      << metrics.to_string() << "\n";
+        }
+
         return 0;
     } catch (const std::exception& e) {
         std::cerr << "Error in image enhancement: " << e.what() << "\n";
@@ -263,11 +293,22 @@ int main(int argc, char* argv[]) {
         std::filesystem::path input_path;
         std::filesystem::path output_path;
         mirage::enhancement::EnhancementConfig config{};
+        mirage::enhancement::PrecisionMode precision_mode = mirage::enhancement::PrecisionMode::FP32;
+        mirage::enhancement::MixedPrecisionPolicy mixed_policy{};
 
         for (size_t i = 1; i < args.size(); ++i) {
             if (args[i] == "--output" || args[i] == "-o") {
                 if (i + 1 < args.size()) {
                     output_path = args[++i];
+                }
+            } else if (args[i] == "--precision") {
+                if (i + 1 < args.size()) {
+                    try {
+                        precision_mode = mirage::enhancement::parse_precision_mode(args[++i]);
+                    } catch (const std::exception& e) {
+                        std::cerr << "Error: " << e.what() << "\n";
+                        return 1;
+                    }
                 }
             } else if (args[i] == "--brightness") {
                 if (i + 1 < args.size()) {
@@ -326,7 +367,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        return handle_enhance(input_path, output_path, config);
+        return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy);
     }
 
     std::cerr << "Error: Unrecognized option '" << args[0] << "'\n\n";

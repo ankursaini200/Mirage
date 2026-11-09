@@ -8,6 +8,8 @@ if(TARGET GTest::gtest AND TARGET GTest::gtest_main)
         test_color_converter.cpp
         test_tile_manager.cpp
         test_enhancement_engine.cpp
+        test_half.cpp
+        test_precision_engine.cpp
     )
 
     target_link_libraries(mirage_tests
@@ -40,4 +42,7 @@ if(TARGET mirage)
 
     add_test(NAME cli_test_enhance_missing_output COMMAND mirage --enhance dummy.png)
     set_tests_properties(cli_test_enhance_missing_output PROPERTIES WILL_FAIL TRUE)
+
+    add_test(NAME cli_test_enhance_invalid_precision COMMAND mirage --enhance dummy.png --output out.png --precision invalid_mode)
+    set_tests_properties(cli_test_enhance_invalid_precision PROPERTIES WILL_FAIL TRUE)
 endif()

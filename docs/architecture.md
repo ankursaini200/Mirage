@@ -17,6 +17,7 @@ Mirage evaluates a tile-based approach:
 +-----------------------------------------------------------------------------------+
 |                                 Application Layer                                 |
 |          (CLI: --enhance, --image-info, --tile-info, --visualize-tiles)           |
+|                Supports --precision <fp32|fp16|mixed> & Error Metrics             |
 +------------------------------------------+----------------------------------------+
                                            |
 +------------------------------------------v----------------------------------------+
@@ -26,6 +27,13 @@ Mirage evaluates a tile-based approach:
 |   |   Version & Metadata  |   | CPU Capability Engine |   | Error Hierarchy   |   |
 |   |   (mirage::version)   |   | (mirage::cpu)         |   | (mirage::image)   |   |
 |   +-----------------------+   +-----------------------+   +-------------------+   |
+|                                                                                   |
+|   +---------------------------------------------------------------------------+   |
+|   |                   Numerical Emulation Core (mirage::core)                 |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   |   | Half (IEEE 754 binary16: 1s 5e 10m, RNTE, Subnormals, NaNs, Inf)  |   |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
 |   |                     Image Processing & Tiling Subsystem                   |   |
@@ -38,12 +46,16 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
-|   |              Baseline Uniform FP32 Enhancement Engine (Phase 3)           |   |
+|   |              Fixed-Precision Enhancement Engine (mirage::enhancement)     |   |
+|   |   +------------------------------------+   +--------------------------+   |   |
+|   |   | Precision Modes: FP32, FP16, Mixed |   | Error Analysis Facility  |   |   |
+|   |   | (MixedPrecisionPolicy assignment)  |   | (MAE, RMSE, PSNR, RelErr)|   |   |
+|   |   +------------------------------------+   +--------------------------+   |   |
 |   |   +-------------------+   +--------------------+   +------------------+   |   |
 |   |   | Brightness Shift  |   | Contrast Midpoint  |   | Saturation Rec709|   |   |
 |   |   +-------------------+   +--------------------+   +------------------+   |   |
 |   |   +-------------------------------------------------------------------+   |   |
-|   |   | Gamma Correction (Power Law) & Deterministic Pipeline             |   |   |
+|   |   | Gamma Correction (Power Law) & Deterministic Execution Pipeline   |   |   |
 |   |   +-------------------------------------------------------------------+   |   |
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
@@ -53,7 +65,7 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
-|   |             [Future Phases: Sensitivity Analysis, FP16/SIMD Kernels]      |   |
+|   |         [Future Phases: Sensitivity Analysis, Adaptive Tiling, AVX2]       |   |
 |   +---------------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------------+
 ```
@@ -129,9 +141,58 @@ All operations operate on normalized `CV_32FC3` matrices with values in $[0.0, 1
 To guarantee numerical reproducibility across future precision variants, operations execute in a strict, fixed order:
 $$\text{Input} \longrightarrow \text{Brightness} \longrightarrow \text{Contrast} \longrightarrow \text{Saturation} \longrightarrow \text{Gamma} \longrightarrow \text{Output}$$
 
-## 5. Future Architectural Roadmap
+## 5. Phase 4 Architecture: Fixed-Precision Computation Framework
 
-- **Phase 4**: Multi-Precision Kernels (FP16 storage & emulation, INT8 quantization) & Adaptive Tiling Engine.
-- **Phase 5**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
-- **Phase 6**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
-- **Phase 7**: Interactive Desktop GUI (PySide6) and Continuous Integration.
+Phase 4 establishes a controlled, deterministic numerical evaluation framework by implementing IEEE 754 binary16 arithmetic emulation alongside the baseline FP32 engine, complete with quantitative numerical error metrics.
+
+### 5.1 IEEE 754 Binary16 Emulation (`mirage::core::Half`)
+
+Modern commodity x86_64 processors with AVX2/F16C support 16-bit float conversions (`vcvtps2ph`, `vcvtph2ps`), but **lack native 16-bit floating-point vector arithmetic** (which requires AVX-512 FP16 or AVX10). To provide cross-platform, deterministic evaluation of reduced numerical precision without architectural bias:
+- **Numerical Representation**: Standard IEEE 754-2008 binary16 format:
+  - 1 sign bit ($s$)
+  - 5 exponent bits ($e$, bias $B = 15$)
+  - 10 fraction/mantissa bits ($m$)
+- **Rounding Semantics**: Exact **Round-to-Nearest, Ties-to-Even (RNTE)** rounding mode. When a 32-bit single-precision float falls exactly halfway between two representable binary16 values, it rounds to the value with an even least significant bit ($m_0 = 0$).
+- **Numerical Domain**:
+  - **Normal numbers**: Exponents $e \in [1, 30]$, magnitude $2^{-14} \approx 6.10 \times 10^{-5}$ up to $65504.0$.
+  - **Subnormal numbers**: Exponent $e = 0$, gradual underflow down to $2^{-24} \approx 5.96 \times 10^{-8}$.
+  - **Signed zeros**: Fully preserves distinct $+0.0$ (`0x0000`) and $-0.0$ (`0x8000`) according to IEEE 754 signbit rules.
+  - **Infinities & Overflow**: Values whose magnitude exceeds $65519.5$ saturate to $+ \infty$ (`0x7C00`) or $-\infty$ (`0xFC00`).
+  - **Underflow**: Magnitudes strictly below the minimum subnormal tie threshold ($2^{-25}$) flush to signed zero.
+  - **NaN Handling**: Preserves quiet and signaling NaNs (`0x7E00` payload preservation).
+- **Emulated Arithmetic Semantics**: Binary operators (`+`, `-`, `*`, `/`) promote operands to IEEE 754 single-precision `float`, evaluate the arithmetic expression, and explicitly round the result back to `Half` at the operational boundary.
+- **Architectural Clarification**: This framework explicitly models the *numerical precision characteristics* of binary16 computation and is documented as **software-emulated FP16**, not native hardware FP16 execution.
+
+### 5.2 Precision Configurations (`mirage::enhancement`)
+
+Mirage supports three fixed-precision configurations:
+1. **Uniform FP32 (`PrecisionMode::FP32`)**:
+   - The ground-truth reference baseline executing all operations in 32-bit single precision.
+2. **Uniform FP16 (`PrecisionMode::FP16`)**:
+   - All four operations (Brightness, Contrast, Saturation, Gamma) execute through `Half` arithmetic with binary16 quantization applied at each intermediate boundary.
+3. **Mixed Precision (`PrecisionMode::Mixed`)**:
+   - Configurable via `MixedPrecisionPolicy`, assigning individual operational stages to either `FP32` or `FP16`.
+   - Default mixed policy executes light color operations (Brightness, Saturation) in `FP16` while reserving `FP32` for non-linear and contrast-sensitive operations (Contrast, Gamma).
+
+### 5.3 Quantitative Error Analysis Framework
+
+To quantitatively evaluate numerical error propagation in reduced precision compared against the FP32 ground truth reference, `mirage::enhancement::compute_error_metrics(ref, target)` calculates:
+
+1. **Maximum Absolute Error (MAE / $L_\infty$ Norm)**:
+   $$\text{MaxAbsErr} = \max_{c, y, x} |I_{\text{target}}(x, y, c) - I_{\text{ref}}(x, y, c)|$$
+2. **Mean Absolute Error (MAE / $L_1$ Norm)**:
+   $$\text{MeanAbsErr} = \frac{1}{3 \cdot W \cdot H} \sum_{c} \sum_{y} \sum_{x} |I_{\text{target}}(x, y, c) - I_{\text{ref}}(x, y, c)|$$
+3. **Root Mean Square Error (RMSE / $L_2$ Norm)**:
+   $$\text{RMSE} = \sqrt{\frac{1}{3 \cdot W \cdot H} \sum_{c} \sum_{y} \sum_{x} \left(I_{\text{target}}(x, y, c) - I_{\text{ref}}(x, y, c)\right)^2}$$
+4. **Peak Signal-to-Noise Ratio (PSNR in dB)**:
+   $$\text{PSNR} = 10 \cdot \log_{10}\left(\frac{\text{MAX}^2}{\text{MSE}}\right), \quad \text{MAX} = 1.0$$
+   *(Defined as $+\infty$ when $\text{MSE} = 0.0$)*
+5. **Relative Error**:
+   $$\text{RelErr} = \frac{\|I_{\text{target}} - I_{\text{ref}}\|_2}{\|I_{\text{ref}}\|_2 + \epsilon}$$
+
+## 6. Future Architectural Roadmap
+
+- **Phase 5**: Sensitivity Analysis & Tile-Based Adaptive Precision Engine.
+- **Phase 6**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
+- **Phase 7**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
+- **Phase 8**: Interactive Desktop GUI (PySide6) and Continuous Integration.

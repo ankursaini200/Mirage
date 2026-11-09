@@ -3,7 +3,11 @@
 #include <algorithm>
 #include <cmath>
 
+#include "mirage/core/half.hpp"
+
 namespace mirage::enhancement {
+
+using mirage::core::round_to_fp16;
 
 void EnhancementConfig::validate() const {
     if (enable_brightness) {
@@ -42,6 +46,10 @@ void EnhancementEngine::validate_image(const cv::Mat& image, const std::string& 
         throw EnhancementException(operation_name + ": Image dimensions must be strictly positive.");
     }
 }
+
+// ============================================================================
+// FP32 Reference Implementation
+// ============================================================================
 
 void EnhancementEngine::adjust_brightness(const cv::Mat& src, cv::Mat& dst, float delta) {
     validate_image(src, "adjust_brightness");
@@ -178,10 +186,8 @@ void EnhancementEngine::process(const cv::Mat& src, cv::Mat& dst, const Enhancem
     config.validate();
     validate_image(src, "process");
 
-    // Copy source to destination buffer once; perform operations in-place
     src.copyTo(dst);
 
-    // Fixed pipeline sequence: Brightness -> Contrast -> Saturation -> Gamma
     if (config.enable_brightness && config.brightness != 0.0f) {
         adjust_brightness(dst, dst, config.brightness);
     }
@@ -202,5 +208,261 @@ cv::Mat EnhancementEngine::process(const cv::Mat& src, const EnhancementConfig& 
     return dst;
 }
 
-}  // namespace mirage::enhancement
+// ============================================================================
+// FP16 Emulated Implementation (Explicit IEEE 754 binary16 rounding)
+// ============================================================================
 
+void EnhancementEngine::adjust_brightness_fp16(const cv::Mat& src, cv::Mat& dst, float delta) {
+    validate_image(src, "adjust_brightness_fp16");
+    if (!std::isfinite(delta) || delta < -1.0f || delta > 1.0f) {
+        throw EnhancementException("Brightness delta must be in [-1.0, 1.0].");
+    }
+
+    if (dst.empty() || dst.size() != src.size() || dst.type() != src.type()) {
+        dst.create(src.size(), src.type());
+    }
+
+    const float delta_fp16 = round_to_fp16(delta);
+
+    for (int r = 0; r < src.rows; ++r) {
+        const auto* src_ptr = src.ptr<cv::Vec3f>(r);
+        auto* dst_ptr = dst.ptr<cv::Vec3f>(r);
+        for (int c = 0; c < src.cols; ++c) {
+            const cv::Vec3f pix = src_ptr[c];
+            dst_ptr[c] = cv::Vec3f(
+                round_to_fp16(std::clamp(round_to_fp16(round_to_fp16(pix[0]) + delta_fp16), 0.0f, 1.0f)),
+                round_to_fp16(std::clamp(round_to_fp16(round_to_fp16(pix[1]) + delta_fp16), 0.0f, 1.0f)),
+                round_to_fp16(std::clamp(round_to_fp16(round_to_fp16(pix[2]) + delta_fp16), 0.0f, 1.0f))
+            );
+        }
+    }
+}
+
+cv::Mat EnhancementEngine::adjust_brightness_fp16(const cv::Mat& src, float delta) {
+    cv::Mat dst;
+    adjust_brightness_fp16(src, dst, delta);
+    return dst;
+}
+
+void EnhancementEngine::adjust_contrast_fp16(const cv::Mat& src, cv::Mat& dst, float factor, float midpoint) {
+    validate_image(src, "adjust_contrast_fp16");
+    if (!std::isfinite(factor) || factor < 0.0f) {
+        throw EnhancementException("Contrast factor must be finite and >= 0.0.");
+    }
+    if (!std::isfinite(midpoint) || midpoint < 0.0f || midpoint > 1.0f) {
+        throw EnhancementException("Contrast midpoint must be in [0.0, 1.0].");
+    }
+
+    if (dst.empty() || dst.size() != src.size() || dst.type() != src.type()) {
+        dst.create(src.size(), src.type());
+    }
+
+    const float factor_fp16 = round_to_fp16(factor);
+    const float mid_fp16 = round_to_fp16(midpoint);
+
+    for (int r = 0; r < src.rows; ++r) {
+        const auto* src_ptr = src.ptr<cv::Vec3f>(r);
+        auto* dst_ptr = dst.ptr<cv::Vec3f>(r);
+        for (int c = 0; c < src.cols; ++c) {
+            const cv::Vec3f pix = src_ptr[c];
+            cv::Vec3f out;
+            for (int ch = 0; ch < 3; ++ch) {
+                const float in_fp16 = round_to_fp16(pix[ch]);
+                const float diff = round_to_fp16(in_fp16 - mid_fp16);
+                const float scaled = round_to_fp16(factor_fp16 * diff);
+                const float shifted = round_to_fp16(mid_fp16 + scaled);
+                out[ch] = round_to_fp16(std::clamp(shifted, 0.0f, 1.0f));
+            }
+            dst_ptr[c] = out;
+        }
+    }
+}
+
+cv::Mat EnhancementEngine::adjust_contrast_fp16(const cv::Mat& src, float factor, float midpoint) {
+    cv::Mat dst;
+    adjust_contrast_fp16(src, dst, factor, midpoint);
+    return dst;
+}
+
+void EnhancementEngine::adjust_saturation_fp16(const cv::Mat& src, cv::Mat& dst, float factor) {
+    validate_image(src, "adjust_saturation_fp16");
+    if (!std::isfinite(factor) || factor < 0.0f) {
+        throw EnhancementException("Saturation factor must be finite and >= 0.0.");
+    }
+
+    if (dst.empty() || dst.size() != src.size() || dst.type() != src.type()) {
+        dst.create(src.size(), src.type());
+    }
+
+    const float factor_fp16 = round_to_fp16(factor);
+    const float wb_fp16 = round_to_fp16(0.114f);
+    const float wg_fp16 = round_to_fp16(0.587f);
+    const float wr_fp16 = round_to_fp16(0.299f);
+
+    for (int r = 0; r < src.rows; ++r) {
+        const auto* src_ptr = src.ptr<cv::Vec3f>(r);
+        auto* dst_ptr = dst.ptr<cv::Vec3f>(r);
+        for (int c = 0; c < src.cols; ++c) {
+            const cv::Vec3f pix = src_ptr[c];
+            const float b = round_to_fp16(pix[0]);
+            const float g = round_to_fp16(pix[1]);
+            const float r_val = round_to_fp16(pix[2]);
+
+            // Luminance with binary16 rounding at every step
+            const float y_b = round_to_fp16(wb_fp16 * b);
+            const float y_g = round_to_fp16(wg_fp16 * g);
+            const float y_r = round_to_fp16(wr_fp16 * r_val);
+            const float y_bg = round_to_fp16(y_b + y_g);
+            const float y = round_to_fp16(y_bg + y_r);
+
+            cv::Vec3f out;
+            const float chs[3] = {b, g, r_val};
+            for (int ch = 0; ch < 3; ++ch) {
+                const float diff = round_to_fp16(chs[ch] - y);
+                const float scaled = round_to_fp16(factor_fp16 * diff);
+                const float sum = round_to_fp16(y + scaled);
+                out[ch] = round_to_fp16(std::clamp(sum, 0.0f, 1.0f));
+            }
+            dst_ptr[c] = out;
+        }
+    }
+}
+
+cv::Mat EnhancementEngine::adjust_saturation_fp16(const cv::Mat& src, float factor) {
+    cv::Mat dst;
+    adjust_saturation_fp16(src, dst, factor);
+    return dst;
+}
+
+void EnhancementEngine::adjust_gamma_fp16(const cv::Mat& src, cv::Mat& dst, float gamma) {
+    validate_image(src, "adjust_gamma_fp16");
+    if (!std::isfinite(gamma) || gamma <= 0.0f) {
+        throw EnhancementException("Gamma must be strictly positive (> 0.0).");
+    }
+
+    if (dst.empty() || dst.size() != src.size() || dst.type() != src.type()) {
+        dst.create(src.size(), src.type());
+    }
+
+    const float gamma_fp16 = round_to_fp16(gamma);
+    const float inv_gamma_fp16 = round_to_fp16(1.0f / gamma_fp16);
+
+    for (int r = 0; r < src.rows; ++r) {
+        const auto* src_ptr = src.ptr<cv::Vec3f>(r);
+        auto* dst_ptr = dst.ptr<cv::Vec3f>(r);
+        for (int c = 0; c < src.cols; ++c) {
+            const cv::Vec3f pix = src_ptr[c];
+            cv::Vec3f out;
+            for (int ch = 0; ch < 3; ++ch) {
+                const float in_fp16 = round_to_fp16(pix[ch]);
+                const float safe_in = std::max(0.0f, in_fp16);
+                const float powered = round_to_fp16(std::pow(safe_in, inv_gamma_fp16));
+                out[ch] = round_to_fp16(std::clamp(powered, 0.0f, 1.0f));
+            }
+            dst_ptr[c] = out;
+        }
+    }
+}
+
+cv::Mat EnhancementEngine::adjust_gamma_fp16(const cv::Mat& src, float gamma) {
+    cv::Mat dst;
+    adjust_gamma_fp16(src, dst, gamma);
+    return dst;
+}
+
+void EnhancementEngine::process_fp16(const cv::Mat& src, cv::Mat& dst, const EnhancementConfig& config) {
+    config.validate();
+    validate_image(src, "process_fp16");
+
+    src.copyTo(dst);
+
+    if (config.enable_brightness && config.brightness != 0.0f) {
+        adjust_brightness_fp16(dst, dst, config.brightness);
+    }
+    if (config.enable_contrast && config.contrast != 1.0f) {
+        adjust_contrast_fp16(dst, dst, config.contrast, config.contrast_midpoint);
+    }
+    if (config.enable_saturation && config.saturation != 1.0f) {
+        adjust_saturation_fp16(dst, dst, config.saturation);
+    }
+    if (config.enable_gamma && config.gamma != 1.0f) {
+        adjust_gamma_fp16(dst, dst, config.gamma);
+    }
+}
+
+cv::Mat EnhancementEngine::process_fp16(const cv::Mat& src, const EnhancementConfig& config) {
+    cv::Mat dst;
+    process_fp16(src, dst, config);
+    return dst;
+}
+
+// ============================================================================
+// Multi-Precision Configurable Pipeline
+// ============================================================================
+
+void EnhancementEngine::process_with_precision(
+    const cv::Mat& src,
+    cv::Mat& dst,
+    const EnhancementConfig& config,
+    PrecisionMode mode,
+    const MixedPrecisionPolicy& policy) {
+    config.validate();
+    validate_image(src, "process_with_precision");
+
+    if (mode == PrecisionMode::FP32) {
+        process(src, dst, config);
+        return;
+    }
+
+    if (mode == PrecisionMode::FP16) {
+        process_fp16(src, dst, config);
+        return;
+    }
+
+    // Mixed Precision Policy execution
+    src.copyTo(dst);
+
+    if (config.enable_brightness && config.brightness != 0.0f) {
+        if (policy.brightness == PrecisionMode::FP16) {
+            adjust_brightness_fp16(dst, dst, config.brightness);
+        } else {
+            adjust_brightness(dst, dst, config.brightness);
+        }
+    }
+
+    if (config.enable_contrast && config.contrast != 1.0f) {
+        if (policy.contrast == PrecisionMode::FP16) {
+            adjust_contrast_fp16(dst, dst, config.contrast, config.contrast_midpoint);
+        } else {
+            adjust_contrast(dst, dst, config.contrast, config.contrast_midpoint);
+        }
+    }
+
+    if (config.enable_saturation && config.saturation != 1.0f) {
+        if (policy.saturation == PrecisionMode::FP16) {
+            adjust_saturation_fp16(dst, dst, config.saturation);
+        } else {
+            adjust_saturation(dst, dst, config.saturation);
+        }
+    }
+
+    if (config.enable_gamma && config.gamma != 1.0f) {
+        if (policy.gamma == PrecisionMode::FP16) {
+            adjust_gamma_fp16(dst, dst, config.gamma);
+        } else {
+            adjust_gamma(dst, dst, config.gamma);
+        }
+    }
+}
+
+cv::Mat EnhancementEngine::process_with_precision(
+    const cv::Mat& src,
+    const EnhancementConfig& config,
+    PrecisionMode mode,
+    const MixedPrecisionPolicy& policy) {
+    cv::Mat dst;
+    process_with_precision(src, dst, config, mode, policy);
+    return dst;
+}
+
+}  // namespace mirage::enhancement
