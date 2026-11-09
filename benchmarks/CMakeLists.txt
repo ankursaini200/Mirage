@@ -27,3 +27,15 @@ target_link_libraries(mirage_benchmarks
 )
 
 target_compile_features(mirage_benchmarks PRIVATE cxx_std_20)
+
+# Phase 9 Research Experiment Runner
+add_executable(mirage_experiments
+    experiment_runner.cpp
+)
+
+target_link_libraries(mirage_experiments
+    PRIVATE
+        mirage::mirage_core
+)
+
+target_compile_features(mirage_experiments PRIVATE cxx_std_20)

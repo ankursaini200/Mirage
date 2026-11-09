@@ -318,4 +318,37 @@ TEST(AdaptivePrecisionTest, RelativeL2ErrorAndZeroReferenceHandling) {
     EXPECT_TRUE(std::isinf(metrics.peak_signal_to_noise_ratio));
 }
 
+TEST(AdaptivePrecisionTest, DecideRandomParityAndDeterminism) {
+    const cv::Mat img = create_checkerboard_bgr(64, 64, 16); // 4x4 = 16 tiles
+    const image::TileManager tile_mgr(img, 16, 16);
+    EXPECT_EQ(tile_mgr.total_tiles(), 16u);
+
+    // Exact budget: 6 FP32 tiles
+    const auto rand1 = precision::AdaptivePrecisionEngine::decide_random(tile_mgr, 6, 42);
+    EXPECT_EQ(rand1.fp32_count, 6u);
+    EXPECT_EQ(rand1.fp16_count, 10u);
+    EXPECT_DOUBLE_EQ(rand1.fp32_percentage, (6.0 * 100.0) / 16.0);
+
+    // Determinism: same seed produces identical assignments
+    const auto rand2 = precision::AdaptivePrecisionEngine::decide_random(tile_mgr, 6, 42);
+    for (size_t i = 0; i < 16; ++i) {
+        EXPECT_EQ(rand1.assignments[i].precision, rand2.assignments[i].precision);
+    }
+
+    // Different seed produces different assignments
+    const auto rand3 = precision::AdaptivePrecisionEngine::decide_random(tile_mgr, 6, 999);
+    bool any_diff = false;
+    for (size_t i = 0; i < 16; ++i) {
+        if (rand1.assignments[i].precision != rand3.assignments[i].precision) {
+            any_diff = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(any_diff);
+
+    // Out of bounds count throws
+    EXPECT_THROW((void)precision::AdaptivePrecisionEngine::decide_random(tile_mgr, 17, 42),
+                 precision::AdaptivePrecisionException);
+}
+
 }  // namespace mirage::tests

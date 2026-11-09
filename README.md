@@ -25,7 +25,7 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 8 — Hardware Performance and Architectural Analysis (v0.8.0-alpha)
+- **Current Milestone**: Phase 9 — Research Experiments, Ablation Studies and Pareto Analysis (v0.9.0-alpha)
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
@@ -56,8 +56,14 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
     - Roofline-style model and arithmetic intensity classification ($\mathcal{I} = \text{FLOPs}/\text{Byte}$), proving standalone Brightness/Contrast are memory-bound ($\mathcal{I} < 0.38$) and explaining why fusion delivers $1.9\times$ speedup while standalone vectorization yields negligible gains.
     - Empirical investigation of software FP16 emulation overhead: establishes that emulated half-precision increases instructions by **$11.4\times$** and cycles by **$17.2\times$**, demonstrating that hardware FP16 support is required for adaptive precision speedup.
     - Tile-size analysis demonstrating that $32\times 32$ pixels is optimal for high-definition imagery ($2.8\times$ faster analysis than $8\times 8$).
-    - Publication-grade automated charting pipeline producing 7 high-resolution plots via Cairo.
-  - Full automated unit test suite with 99 tests across 15 test suites and 14 CTest cases (100% pass rate).
+  - **Phase 9 Research Experiments, Ablation Studies and Pareto Analysis (`docs/research-results.md`)**:
+    - Perceptual and numerical error metrics: CIEDE2000 ($\Delta E_{00}$, Sharma et al. 2005 standard), SSIM (channel-split 11x11 Gaussian window), PSNR, MAE, RMSE, and Relative $L_2$.
+    - Hypothesis H1 validation: Tested against 30 random seeds at exact budget parity, showing up to **+3.08%** MAE reduction and **+7.41%** $\Delta E_{00}$ reduction over random tile assignment.
+    - Hypothesis H4 ablation: Evaluated all 4 features, leave-one-out, and isolated features, uncovering high mutual information between gradient, edge, and contrast, while identifying edge density as the primary linear error predictor ($r = +0.2332, p = 1.49 \times 10^{-23}$).
+    - Hypothesis H2/H3 Pareto analysis: Multi-dimensional sweeps across tile sizes ($8\times 8$ to $64\times 64$) and thresholds ($[0.00, 1.00]$), establishing Pareto non-dominated sets and determining that $32\times 32$ and $64\times 64$ provide the best tradeoff between dispatch overhead and spatial selectivity.
+    - Curated 7-modality evaluation dataset and reproducible pipeline orchestrator (`benchmarks/run_experiments.sh`).
+    - Publication-grade automated charting pipeline producing 6 high-resolution plots via Cairo.
+  - Full automated unit test suite with 106 tests across 16 test suites and 14 CTest cases (100% pass rate).
 
 ## 4. Technology Stack
 

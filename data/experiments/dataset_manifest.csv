@@ -1,0 +1,8 @@
+id,filename,width,height,channels,modality,description
+mod_01,smooth_gradient.png,512,512,3,"Smooth Gradient","Continuous sinusoidal color gradient testing false contouring and banding."
+mod_02,high_contrast_edges.png,512,512,3,"High-Contrast Edges","Sharp geometric step boundaries, checkerboards, and concentric circles."
+mod_03,detailed_texture.png,512,512,3,"Detailed Texture","High-frequency multi-harmonic sinusoidal waves and subtle micro-textures."
+mod_04,natural_scene.png,512,512,3,"Natural Scene","Simulated landscape containing atmospheric sky, mountain ridge, and foliage."
+mod_05,color_rich.png,512,512,3,"Color Rich","Full-gamut chromatic color wheel spanning full HSV/Lab chrominance."
+mod_06,low_contrast.png,512,512,3,"Low Contrast","Narrow dynamic range foggy scene with subtle luminance and chromatic variation."
+mod_07,grayscale_portrait.png,512,512,3,"Grayscale Portrait","Monochromatic luminance profile with smooth face contours and facial shading."

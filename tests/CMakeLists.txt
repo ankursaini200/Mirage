@@ -12,6 +12,7 @@ if(TARGET GTest::gtest AND TARGET GTest::gtest_main)
         test_precision_engine.cpp
         test_sensitivity_analyzer.cpp
         test_adaptive_precision.cpp
+        test_quality_metrics.cpp
         test_simd.cpp
     )
 

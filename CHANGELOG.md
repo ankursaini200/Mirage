@@ -5,6 +5,40 @@ All notable changes to **Mirage** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0-alpha] - 2026-11-10
+
+### Added
+- **Perceptual and Numerical Quality Metrics Suite (`mirage::analysis::QualityMetrics`)**:
+  - Implemented exact CIE CIEDE2000 ($\Delta E_{00}$) color difference formula conforming to Sharma et al. (2005) reference standard on scientific CIELAB floating-point matrices.
+  - Implemented Structural Similarity Index (SSIM) using standard $11\times 11$ Gaussian window ($\sigma = 1.5$) evaluated per-channel to maintain zero deprecation warnings in OpenCV 5.
+  - Implemented comprehensive quality evaluation (`evaluate_quality`) reporting Max Absolute Error ($L_\infty$), Mean Absolute Error ($L_1$), RMSE ($L_2$), Relative $L_2$ error, PSNR (dB), SSIM, Mean $\Delta E_{00}$, and Max $\Delta E_{00}$.
+- **Deterministic Random Tile Assignment Baseline (`AdaptivePrecisionEngine::decide_random`)**:
+  - Added deterministic pseudo-random tile allocation ensuring exact FP32 tile budget parity ($K$ out of $N$ tiles) with sensitivity-guided decisions.
+  - Added `decide_random_from_policy` and `enhance_with_decision` allowing controlled null-hypothesis comparisons.
+- **Curated Multi-Modal Evaluation Dataset (`examples/generate_dataset.cpp`)**:
+  - Built standalone dataset generator producing 7 distinct $512\times 512$ image modalities: Smooth Gradient, High-Contrast Edges, Detailed Texture, Natural Scene, Color Rich, Low Contrast, and Grayscale Portrait.
+  - Automated generation of `data/experiments/dataset_manifest.csv`.
+- **High-Throughput Research Experiment Runner (`benchmarks/mirage_experiments`)**:
+  - Implemented automated experiment runner in C++ executing 4 core research experiments:
+    1. **Experiment A (H1)**: Sensitivity-guided vs. 30 random seeds at exact budget parity across 4 sensitivity thresholds and 7 modalities (869 recorded runs).
+    2. **Experiment B (H4)**: Sensitivity feature ablation testing all-features, leave-one-out, and isolated features with renormalized weights summing to 1.0 (127 recorded runs).
+    3. **Experiment C**: Tile-by-tile validation correlating tile sensitivity scores with ground-truth FP16 error across 1,792 spatial tiles.
+    4. **Experiment D (H2 & H3)**: Multi-dimensional Pareto sweeps across 4 tile sizes ($8\times 8$ to $64\times 64$) and 13 sensitivity thresholds (365 recorded runs).
+- **Statistical Analysis & Publication Plotting Suite (`scripts/analyze_experiments.py`)**:
+  - Automated calculation of paired t-tests, Wilcoxon signed-rank tests, Pearson $r$, Spearman $\rho$, quartile error distributions, and Pareto non-dominated sets.
+  - Generated 6 high-resolution publication-quality PNG charts in `benchmarks/plots/` using Cairo:
+    - `random_vs_guided.png`
+    - `feature_ablation.png`
+    - `sensitivity_vs_error.png`
+    - `tile_size_comparison.png`
+    - `pareto_error_runtime.png`
+    - `pareto_deltae_runtime.png`
+- **End-to-End Experiment Reproducibility Orchestrator (`benchmarks/run_experiments.sh`)**:
+  - Single-command pipeline building targets, generating datasets, executing experiments, and generating analysis reports and plots.
+- **Dedicated Research Results Documentation (`docs/research-results.md`)**:
+  - Comprehensive research report addressing the central research question, documenting statistical findings, negative results, architectural sweet spots, and threats to validity.
+- Total automated unit tests increased to 106 across 16 test suites; 14 CTest test suites passing (100%).
+
 ## [0.8.0-alpha] - 2026-11-10
 
 ### Added

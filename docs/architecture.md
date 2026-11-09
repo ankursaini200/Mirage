@@ -383,7 +383,23 @@ Hardware measurements on 1080p Full HD demonstrate that software IEEE 754 half-p
 For complete performance tables, charts, and reproduction commands, refer to [`docs/performance-analysis.md`](performance-analysis.md).
 | **Full Pipeline (FP16 Emulated)**| 8.849 ms (0.05x) | 680.547 ms (0.06x) | — | Software emulation overhead (rounding at every arithmetic boundary) |
 
-## 9. Future Architectural Roadmap
+## 10. Phase 9 Architecture: Research Experiments, Ablation Studies & Pareto Analysis
 
-- **Phase 8**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
-- **Phase 9**: Interactive Desktop GUI (PySide6) and Continuous Integration.
+### 10.1 Quality Metrics Suite (`mirage::analysis::QualityMetrics`)
+- **CIEDE2000 ($\Delta E_{00}$)**: Sharma et al. (2005) standard implementation evaluating perceptual color difference on scientific floating-point CIELAB matrices.
+- **Structural Similarity (SSIM)**: $11\times 11$ Gaussian window ($\sigma = 1.5$) evaluated per-channel across B, G, R to preserve zero deprecation warnings in OpenCV 5.
+- **Numerical Metrics**: MAE ($L_1$), RMSE ($L_2$), Max Absolute Error ($L_\infty$), Relative $L_2$ error, and PSNR (dB).
+
+### 10.2 Deterministic Random Tile Assignment Protocol
+- **Null Hypothesis Baseline**: `AdaptivePrecisionEngine::decide_random` enforces exact budget parity ($K$ out of $N$ tiles assigned to FP32) matching guided decisions, evaluated across 30 deterministic pseudo-random seeds per configuration.
+
+### 10.3 Multi-Modal Dataset & Automated Experiment Runner
+- **Curated Dataset (`mirage_generate_dataset`)**: 7 modalities ($512\times 512$) testing smooth gradients, step edges, detailed texture, natural scenery, chromatic wheels, low contrast, and grayscale luminance.
+- **C++ Experiment Runner (`mirage_experiments`)**: Executes 4 core research experiments (Random vs Guided, Feature Ablation, Tile-by-Tile Validation, and Pareto Sweeps).
+- **Python Statistical Suite (`scripts/analyze_experiments.py`)**: Computes paired t-tests, Wilcoxon signed-rank tests, Pearson $r$, Spearman $\rho$, and generates 6 Cairo publication charts in `benchmarks/plots/`.
+
+For complete research results and Pareto frontiers, refer to [`docs/research-results.md`](research-results.md).
+
+## 11. Future Architectural Roadmap
+
+- **Phase 10**: Interactive Desktop GUI (PySide6 / C++ Bindings) and Live Heatmap Visualization.

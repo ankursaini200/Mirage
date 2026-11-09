@@ -325,3 +325,34 @@ Output files generated:
 - `benchmarks/plots/*.png` (7 publication charts)
 
 For comprehensive analysis and findings, consult [`docs/performance-analysis.md`](performance-analysis.md).
+
+## Research Experiments & Ablation Studies (Phase 9)
+
+Mirage includes an automated research experiment pipeline evaluating the adaptive precision hypothesis against random tile baselines and feature ablations.
+
+```bash
+# Generate the multi-modal 7-modality test dataset
+./build/release/mirage_generate_dataset data/experiments
+
+# Run the complete C++ research experiment suite
+./build/release/benchmarks/mirage_experiments \
+    --dataset-dir data/experiments \
+    --output-dir benchmarks/experiments \
+    --seeds 30
+
+# Run Python statistical analysis and Cairo publication plotting
+python3 scripts/analyze_experiments.py
+
+# Or execute everything in a single reproducible command:
+./benchmarks/run_experiments.sh
+```
+
+Generated research artifacts:
+- `benchmarks/experiments/dataset_manifest.csv`
+- `benchmarks/experiments/random_ablation.csv`
+- `benchmarks/experiments/feature_ablation.csv`
+- `benchmarks/experiments/tile_sensitivity_errors.csv`
+- `benchmarks/experiments/pareto_results.csv`
+- `benchmarks/plots/*.png` (6 Phase 9 publication plots)
+
+For full findings, statistical test results, and Pareto curves, consult [`docs/research-results.md`](research-results.md).

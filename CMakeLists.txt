@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Mirage
-    VERSION 0.8.0
+    VERSION 0.9.0
     DESCRIPTION "Adaptive Precision for Software-Based Color Image Enhancement"
     LANGUAGES CXX
 )
@@ -89,6 +89,7 @@ add_library(mirage_core
     src/enhancement/enhancement_engine.cpp
     src/enhancement/precision_config.cpp
     src/analysis/sensitivity_analyzer.cpp
+    src/analysis/quality_metrics.cpp
     src/precision/adaptive_precision.cpp
 )
 add_library(mirage::mirage_core ALIAS mirage_core)
@@ -135,6 +136,13 @@ add_executable(mirage_generate_sample
 )
 target_link_libraries(mirage_generate_sample PRIVATE mirage::mirage_core)
 target_compile_features(mirage_generate_sample PRIVATE cxx_std_20)
+
+# Multi-modal experiment dataset generator
+add_executable(mirage_generate_dataset
+    examples/generate_dataset.cpp
+)
+target_link_libraries(mirage_generate_dataset PRIVATE mirage::mirage_core)
+target_compile_features(mirage_generate_dataset PRIVATE cxx_std_20)
 
 # Testing configuration with CTest
 if(MIRAGE_BUILD_TESTS)

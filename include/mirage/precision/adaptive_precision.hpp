@@ -90,6 +90,53 @@ public:
         double threshold = DEFAULT_SENSITIVITY_THRESHOLD);
 
     /**
+     * @brief Assigns FP32 to exactly fp32_count randomly chosen tiles, and FP16 to the rest.
+     *
+     * Used as a deterministic null hypothesis baseline for research ablation studies.
+     *
+     * @param tile_mgr TileManager defining the grid and total tile count.
+     * @param fp32_count Exact count of tiles to assign FP32 precision.
+     * @param seed Deterministic random seed for reproducibility.
+     * @return AdaptivePrecisionDecision matching the exact tile budget.
+     */
+    [[nodiscard]] static AdaptivePrecisionDecision decide_random(
+        const image::TileManager& tile_mgr,
+        size_t fp32_count,
+        uint32_t seed = 42);
+
+    /**
+     * @brief Assigns random tile precisions matching the exact FP32 budget of a guided decision.
+     *
+     * @param tile_mgr TileManager defining the image grid.
+     * @param guided_decision The sensitivity-guided decision whose fp32_count will be matched.
+     * @param seed Deterministic random seed for reproducibility.
+     * @return AdaptivePrecisionDecision with exact budget parity.
+     */
+    [[nodiscard]] static AdaptivePrecisionDecision decide_random_from_policy(
+        const image::TileManager& tile_mgr,
+        const AdaptivePrecisionDecision& guided_decision,
+        uint32_t seed = 42);
+
+    /**
+     * @brief Executes enhancement on an image using a pre-determined precision decision.
+     *
+     * Timed execution strictly spans per-tile enhancement and image reconstruction.
+     *
+     * @param bgr_normalized Normalized input image (CV_32FC3 in [0.0, 1.0]).
+     * @param config Enhancement parameter configuration.
+     * @param tile_mgr TileManager defining tile partitioning.
+     * @param decision Pre-computed precision decision (guided, random, or custom).
+     * @param backend SIMD execution backend.
+     * @return Pair of enhanced image and execution time in milliseconds.
+     */
+    [[nodiscard]] static std::pair<cv::Mat, double> enhance_with_decision(
+        const cv::Mat& bgr_normalized,
+        const enhancement::EnhancementConfig& config,
+        const image::TileManager& tile_mgr,
+        const AdaptivePrecisionDecision& decision,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+
+    /**
      * @brief Executes tile-based adaptive precision image enhancement.
      *
      * Timed execution strictly spans:
