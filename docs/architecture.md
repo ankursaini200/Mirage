@@ -298,8 +298,92 @@ To evaluate numerical deviation relative to signal energy:
 $$\text{Relative } L_2 \text{ Error} = \frac{\|I_{\text{target}} - I_{\text{ref}}\|_2}{\|I_{\text{ref}}\|_2 + \epsilon} = \frac{\sqrt{\sum (I_{\text{target}}(x, y, c) - I_{\text{ref}}(x, y, c))^2}}{\sqrt{\sum I_{\text{ref}}(x, y, c)^2} + \epsilon}$$
 where $\epsilon = 10^{-10}$ ensures numerical stability without division-by-zero on completely dark images.
 
-## 8. Future Architectural Roadmap
+## 8. Phase 7 Architecture: SIMD Optimization with AVX2 & Runtime Dispatch
 
-- **Phase 7**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
+### 8.1 Minimal SIMD Dispatch Architecture
+
+To preserve strict cross-platform portability on CPUs without AVX2 (or non-x86 architectures) while enabling hardware-accelerated vectorization on supported processors:
+- **Runtime Dispatch Model**: Execution backend is selected dynamically via `mirage::simd::ExecutionBackend` (`Auto`, `Scalar`, `AVX2`).
+  - `Auto`: Queries `CpuFeatures::detect().has_avx2` at runtime. If supported, routes to AVX2 kernels; otherwise falls back gracefully to portable scalar implementations.
+  - `Scalar`: Forces the portable reference implementation.
+  - `AVX2`: Explicitly requests AVX2 execution; throws an `EnhancementException` if the host CPU or OS lacks AVX2 state management.
+- **Isolated Architecture Compilation**:
+  - Global project compilation options remain strictly standard (`-O3` on Release, no global `-mavx2`).
+  - Architecture-specific flags (`-mavx2 -mfma -mf16c` on GCC/Clang, `/arch:AVX2` on MSVC) are scoped **exclusively** to `src/simd/avx2_kernels.cpp`.
+  - Non-AVX2 hosts never execute `src/simd/avx2_kernels.cpp` functions, preventing invalid opcode (`#UD`) hardware exceptions.
+
+### 8.2 Hardware Feature Distinctions: AVX2 vs. F16C vs. Native FP16
+
+A fundamental Computer Organization and Architecture requirement in Mirage is distinguishing:
+1. **AVX2 (Advanced Vector Extensions 2)**: 256-bit vector integer and single/double-precision floating-point arithmetic. Does NOT provide native 16-bit floating-point arithmetic.
+2. **F16C (Half-Precision Floating-Point Conversion)**: Hardware instruction set (`vcvtps2ph`, `vcvtph2ps`) providing single-instruction conversion between FP32 vectors and 16-bit IEEE 754 binary16 format. Does NOT perform arithmetic operations in FP16.
+3. **Native FP16 Arithmetic**: Vector hardware execution of arithmetic directly on 16-bit floats (e.g. AVX-512 FP16, ARM NEON `fp16`). Not supported by standard AVX2.
+
+### 8.3 AVX2 FP32 Kernel Implementations
+
+- **Brightness Adjustment**:
+  - Processes 8 single-precision floats (`__m256`) per vector iteration using `_mm256_add_ps` and clamps with `_mm256_max_ps(0.0f, _mm256_min_ps(x, 1.0f))`.
+  - Unaligned memory loads and stores (`_mm256_loadu_ps` / `_mm256_storeu_ps`) ensure safe processing across arbitrary strides and partial tiles.
+  - Tail loop processes remaining $N \pmod 8$ elements scalar-wise.
+- **Contrast Adjustment**:
+  - Implements $(I_{\text{in}} - \text{midpoint}) \times \text{factor} + \text{midpoint}$ using `_mm256_sub_ps`, `_mm256_mul_ps`, and `_mm256_add_ps`.
+  - Maintains bit-identical parity with the scalar reference implementation.
+- **Fused Brightness + Contrast**:
+  - Evaluates Brightness clamping followed immediately by Contrast adjustment in vector registers.
+  - Eliminates intermediate memory store and reload passes, reducing DRAM memory traffic by 50%.
+  - Yields **1.81x–1.90x** speedup on 1080p and 4K images and **3.31x** on cache-resident tiles.
+- **Rec. 709 Saturation**:
+  - Vectorized across 8 interleaved BGR pixels (24 floats) per iteration using `_mm256_permutevar8x32_ps` and `_mm256_blend_ps` cross-lane permutations.
+  - Computes luminance $Y = 0.114 B + 0.587 G + 0.299 R$ across 8 pixels simultaneously, applies chroma scaling, clamps to $[0, 1]$, and reassembles interleaved BGR output.
+  - Achieves bit-identical or $\le 1 \times 10^{-6}$ numerical parity.
+- **Gamma Correction**:
+  - Nonlinear power operation ($I^{1/\gamma}$) retained as scalar reference to maintain exact IEEE 754 transcendental accuracy without introducing polynomial approximations.
+
+### 8.4 Measured Performance Analysis
+
+| Operation / Benchmark | Small (190x130) | 1080p (1920x1080) | 4K UHD (3840x2160) | Memory / Compute Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **Brightness (FP32 AVX2)** | 0.011 ms (1.52x) | 2.657 ms (1.01x) | 10.909 ms (1.00x) | Memory-bandwidth bound at 1080p/4K; compute-bound on Small |
+| **Contrast (FP32 AVX2)** | 0.015 ms (1.61x) | 2.631 ms (1.02x) | 10.957 ms (1.01x) | Memory-bandwidth bound at 1080p/4K; compute-bound on Small |
+| **Combined B+C (Fused AVX2)**| **0.008 ms (3.31x)** | **2.875 ms (1.81x)** | **10.618 ms (1.90x)** | **DRAM traffic cut by 50%; substantial speedup across all sizes** |
+| **Saturation (FP32 AVX2)** | 0.019 ms (1.75x) | 2.627 ms (1.22x) | 11.329 ms (1.13x) | Compute-intensive 24-float vector permutation & lerp |
+| **Full Pipeline (FP32 AVX2)**| 0.426 ms (1.09x) | 37.991 ms (1.11x) | 151.951 ms (1.12x) | AVX2 B+C+Sat speedup with scalar Gamma fallback |
+
+## 9. Phase 8 Architecture: Hardware Performance Counters, Roofline Model & Profiling
+
+### 9.1 Multi-Feature Safety Architecture
+Phase 8 enforces strict multi-feature validation:
+- Disassembly of `avx2_kernels.cpp.o` identified compiler-synthesized FMA instructions (`vfmadd132ps`, `vfmadd231ps`, `vfmadd132ss`) alongside 256-bit AVX2 vectors.
+- Dispatch validation was hardened:
+  $$\text{is\_backend\_supported}(\text{ExecutionBackend::AVX2}) \iff \text{features.has\_avx2} \land \text{features.has\_fma}$$
+- `resolve_backend(ExecutionBackend::Auto)` evaluates this condition dynamically, guaranteeing that CPUs lacking FMA will never execute code containing FMA instructions.
+- `-mf16c` was decoupled from `avx2_kernels.cpp` in `CMakeLists.txt` since F16C instructions are not emitted in the core kernel object.
+
+### 9.2 In-Process Hardware Performance Counter Profiling
+Mirage integrates direct, native hardware performance counter measurement (`mirage::benchmark::HardwarePerfSampler`) utilizing the Linux `perf_event_open()` system call (`exclude_kernel = 1`, `exclude_hv = 1`).
+Counters tracked:
+- CPU Cycles (`PERF_COUNT_HW_CPU_CYCLES`)
+- Instructions Retired (`PERF_COUNT_HW_INSTRUCTIONS`)
+- Cache References & Misses (`PERF_COUNT_HW_CACHE_REFERENCES`, `PERF_COUNT_HW_CACHE_MISSES`)
+- Branch Instructions & Mispredictions (`PERF_COUNT_HW_BRANCH_INSTRUCTIONS`, `PERF_COUNT_HW_BRANCH_MISSES`)
+- Task Clock Time (`PERF_COUNT_SW_TASK_CLOCK`)
+
+### 9.3 Roofline-Style Modeling & Arithmetic Intensity
+Operations are categorized against the machine ridge point ($\mathcal{I}_{\text{ridge}} = 4.27 \text{ FLOP/Byte}$ on Intel Core i7-13650HX with dual-channel DDR5):
+- **Memory-Bound ($\mathcal{I} < 4.27 \text{ FLOP/Byte}$)**:
+  - Brightness ($\mathcal{I} = 0.250$), Contrast ($\mathcal{I} = 0.375$), Unfused B+C ($\mathcal{I} = 0.313$), Fused B+C ($\mathcal{I} = 0.625$), Saturation ($\mathcal{I} = 0.708$).
+  - **Empirical Proof**: Vectorized Brightness reduces retired instructions by $3.07\times$ on 1080p, but IPC drops from 2.46 to 0.84 due to 66% cache misses and DRAM memory bus saturation.
+  - **Fusion Advantage**: Fused Brightness+Contrast cuts memory bus traffic from 48 bytes/pixel to 24 bytes/pixel, achieving a **$1.89\times–1.93\times$ speedup**.
+- **Compute-Bound ($\mathcal{I} \ge 3.0 \text{ FLOP/Byte}$)**:
+  - Gamma Correction ($\mathcal{I} = 3.125$), Sensitivity Analysis ($\mathcal{I} = 4.167$).
+
+### 9.4 Software FP16 Emulation Overhead Breakdown
+Hardware measurements on 1080p Full HD demonstrate that software IEEE 754 half-precision rounding, bit manipulation, and tie-breaking increases instructions retired by **$11.4\times$** (from 575M to 6.58B instructions) and execution cycles by **$17.2\times$**, proving that adaptive precision cannot yield execution time savings without hardware FP16 execution units.
+
+For complete performance tables, charts, and reproduction commands, refer to [`docs/performance-analysis.md`](performance-analysis.md).
+| **Full Pipeline (FP16 Emulated)**| 8.849 ms (0.05x) | 680.547 ms (0.06x) | — | Software emulation overhead (rounding at every arithmetic boundary) |
+
+## 9. Future Architectural Roadmap
+
 - **Phase 8**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
 - **Phase 9**: Interactive Desktop GUI (PySide6) and Continuous Integration.

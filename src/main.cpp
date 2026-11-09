@@ -12,6 +12,7 @@
 #include "mirage/image/image_loader.hpp"
 #include "mirage/image/tile_manager.hpp"
 #include "mirage/precision/adaptive_precision.hpp"
+#include "mirage/simd/simd_backend.hpp"
 #include "mirage/version.hpp"
 
 namespace {
@@ -34,6 +35,7 @@ void print_help(std::string_view program_name) {
               << "                                      Run image enhancement pipeline\n"
               << "    [--precision <fp32|fp16|mixed|adaptive>]\n"
               << "                                      Numerical precision policy (default: fp32)\n"
+              << "    [--backend <auto|scalar|avx2>]    Execution backend (default: auto)\n"
               << "    [--sensitivity-threshold <val>]   Cutoff for adaptive precision in [0.0, 1.0] (default: 0.04)\n"
               << "    [--tile-size <size>]              Nominal tile dimensions for adaptive mode (default: 32)\n"
               << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
@@ -53,13 +55,17 @@ void print_version() {
 
 void print_info() {
     const auto& cpu = mirage::cpu::CpuFeatures::detect();
+    const auto default_backend = mirage::simd::resolve_backend(mirage::simd::ExecutionBackend::Auto);
 
     std::cout << "Project name:              " << mirage::PROJECT_NAME << "\n"
               << "Project version:           " << mirage::get_version_string() << "\n"
               << "C++ standard:              " << mirage::get_cpp_standard_string() << "\n"
               << "Compiler information:      " << mirage::get_compiler_info_string() << "\n"
               << "Detected CPU architecture: " << cpu.architecture_name() << "\n"
-              << "AVX2 availability:         " << cpu.avx2_status_string() << "\n";
+              << "AVX2 availability:         " << cpu.avx2_status_string() << "\n"
+              << "F16C availability:         " << (cpu.has_f16c ? "Supported" : "Unsupported") << "\n"
+              << "FMA availability:          " << (cpu.has_fma ? "Supported" : "Unsupported") << "\n"
+              << "Default execution backend: auto (resolves to " << mirage::simd::to_string(default_backend) << ")\n";
 }
 
 int handle_image_info(const std::filesystem::path& image_path) {
@@ -230,16 +236,17 @@ int handle_enhance(const std::filesystem::path& input_path,
                    const std::filesystem::path& output_path,
                    const mirage::enhancement::EnhancementConfig& config,
                    mirage::enhancement::PrecisionMode mode,
-                   const mirage::enhancement::MixedPrecisionPolicy& policy) {
+                   const mirage::enhancement::MixedPrecisionPolicy& policy,
+                   mirage::simd::ExecutionBackend backend) {
     try {
         config.validate();
 
         const cv::Mat u8_in = mirage::image::ImageLoader::load(input_path);
         const cv::Mat f32_in = mirage::image::ImageLoader::normalize_to_float32(u8_in);
 
-        // Compute output using selected precision mode
+        // Compute output using selected precision mode and backend
         const cv::Mat f32_out = mirage::enhancement::EnhancementEngine::process_with_precision(
-            f32_in, config, mode, policy);
+            f32_in, config, mode, policy, backend);
         const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(f32_out);
 
         mirage::image::ImageLoader::save(output_path, u8_out);
@@ -261,6 +268,8 @@ int handle_enhance(const std::filesystem::path& input_path,
                   << "  Output:              " << output_path.string() << "\n"
                   << "  Dimensions:          " << u8_in.cols << " x " << u8_in.rows << "\n"
                   << "  Precision Mode:      " << mode_desc << "\n"
+                  << "  Backend:             " << mirage::simd::to_string(backend)
+                  << " (resolved to " << mirage::simd::to_string(mirage::simd::resolve_backend(backend)) << ")\n"
                   << "  Brightness:          " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
                   << "  Contrast:            " << (config.enable_contrast ? std::to_string(config.contrast) : "disabled") << "\n"
                   << "  Saturation:          " << (config.enable_saturation ? std::to_string(config.saturation) : "disabled") << "\n"
@@ -287,7 +296,8 @@ int handle_enhance_adaptive(const std::filesystem::path& input_path,
                             const std::filesystem::path& output_path,
                             const mirage::enhancement::EnhancementConfig& config,
                             int tile_size,
-                            double threshold) {
+                            double threshold,
+                            mirage::simd::ExecutionBackend backend) {
     try {
         config.validate();
 
@@ -296,7 +306,7 @@ int handle_enhance_adaptive(const std::filesystem::path& input_path,
 
         // Execute adaptive enhancement with isolated timing
         const auto result = mirage::precision::AdaptivePrecisionEngine::enhance_adaptive(
-            f32_in, config, tile_size, tile_size, threshold);
+            f32_in, config, tile_size, tile_size, threshold, mirage::analysis::SensitivityWeights{}, backend);
 
         // Save output
         const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(result.enhanced_image);
@@ -312,6 +322,8 @@ int handle_enhance_adaptive(const std::filesystem::path& input_path,
                   << "  Output:                " << output_path.string() << "\n"
                   << "  Dimensions:            " << u8_in.cols << " x " << u8_in.rows << "\n"
                   << "  Precision Mode:        Adaptive (Sensitivity-Guided Precision Selection)\n"
+                  << "  Backend:               " << mirage::simd::to_string(backend)
+                  << " (resolved to " << mirage::simd::to_string(mirage::simd::resolve_backend(backend)) << ")\n"
                   << "  Sensitivity Threshold: " << std::fixed << std::setprecision(4) << threshold << "\n"
                   << "  Tile Dimensions:       " << tile_size << " x " << tile_size << "\n"
                   << "  Brightness:            " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
@@ -452,6 +464,7 @@ int main(int argc, char* argv[]) {
         std::filesystem::path output_path;
         mirage::enhancement::EnhancementConfig config{};
         mirage::enhancement::PrecisionMode precision_mode = mirage::enhancement::PrecisionMode::FP32;
+        mirage::simd::ExecutionBackend backend = mirage::simd::ExecutionBackend::Auto;
         mirage::enhancement::MixedPrecisionPolicy mixed_policy{};
         int tile_size = 32;
         double sensitivity_threshold = mirage::precision::DEFAULT_SENSITIVITY_THRESHOLD;
@@ -465,6 +478,20 @@ int main(int argc, char* argv[]) {
                 if (i + 1 < args.size()) {
                     try {
                         precision_mode = mirage::enhancement::parse_precision_mode(args[++i]);
+                    } catch (const std::exception& e) {
+                        std::cerr << "Error: " << e.what() << "\n";
+                        return 1;
+                    }
+                }
+            } else if (args[i] == "--backend") {
+                if (i + 1 < args.size()) {
+                    try {
+                        backend = mirage::simd::parse_execution_backend(args[++i]);
+                        if (!mirage::simd::is_backend_supported(backend)) {
+                            std::cerr << "Error: Execution backend '" << mirage::simd::to_string(backend)
+                                      << "' requested but not supported on this host CPU.\n";
+                            return 1;
+                        }
                     } catch (const std::exception& e) {
                         std::cerr << "Error: " << e.what() << "\n";
                         return 1;
@@ -549,10 +576,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: Sensitivity threshold must be in [0.0, 1.0].\n";
                 return 1;
             }
-            return handle_enhance_adaptive(input_path, output_path, config, tile_size, sensitivity_threshold);
+            return handle_enhance_adaptive(input_path, output_path, config, tile_size, sensitivity_threshold, backend);
         }
 
-        return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy);
+        return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy, backend);
     }
 
     std::cerr << "Error: Unrecognized option '" << args[0] << "'\n\n";

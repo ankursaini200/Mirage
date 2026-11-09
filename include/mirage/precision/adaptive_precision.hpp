@@ -12,6 +12,7 @@
 #include "mirage/enhancement/enhancement_engine.hpp"
 #include "mirage/enhancement/precision_config.hpp"
 #include "mirage/image/tile_manager.hpp"
+#include "mirage/simd/simd_backend.hpp"
 
 namespace mirage::precision {
 
@@ -113,7 +114,8 @@ public:
         int tile_width = 32,
         int tile_height = 32,
         double threshold = DEFAULT_SENSITIVITY_THRESHOLD,
-        const analysis::SensitivityWeights& weights = analysis::SensitivityWeights{});
+        const analysis::SensitivityWeights& weights = analysis::SensitivityWeights{},
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
     /**
      * @brief Processes pre-tiled image using pre-computed precision assignments.
@@ -123,7 +125,8 @@ public:
         cv::Mat& dst_output,
         const image::TileManager& tile_mgr,
         const AdaptivePrecisionDecision& decision,
-        const enhancement::EnhancementConfig& config);
+        const enhancement::EnhancementConfig& config,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 };
 
 }  // namespace mirage::precision

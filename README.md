@@ -25,11 +25,11 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 6 — Adaptive Precision Decision Engine
+- **Current Milestone**: Phase 8 — Hardware Performance and Architectural Analysis (v0.8.0-alpha)
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
-  - Safe, multi-tier CPU feature detection (x86_64 CPUID, OSXSAVE, and XCR0 verification for AVX2 without executing illegal instructions).
+  - Safe, multi-tier CPU feature detection (x86_64 CPUID, OSXSAVE, and XCR0 verification for AVX2 and FMA without executing illegal instructions).
   - Validated image loader supporting JPG, JPEG, PNG, and BMP with corrupted and empty file rejection.
   - Color space conversion between BGR, RGB, and scientific floating-point CIELAB ($L^* \in [0, 100]$, $a^*, b^* \in [-127, 127]$).
   - Spatial tile manager with non-divisible boundary clamping, zero-copy ROI views, and lossless reconstruction.
@@ -44,15 +44,20 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
     - Tile-level dispatch processing each spatial tile in its assigned numerical precision.
     - Isolated execution timing strictly measuring the adaptive pipeline.
     - Precision distribution reporting (FP32/FP16 tile counts and percentages).
-  - Quantitative error analysis facility measuring Maximum Absolute Error (MAE / $L_\infty$), Mean Absolute Error (MAE / $L_1$), RMSE, PSNR (dB), Relative $L_2$ Error, and Mean Relative Error.
-  - **Tile-Based Sensitivity Analyzer (`mirage::analysis::SensitivityAnalyzer`)**:
-    - Four standardized, normalized perceptual features per tile: Color Variation ($C$), Gradient Magnitude ($G$), Edge Density ($E$), and Local Contrast ($L$).
-    - Weighted sensitivity combination ($S = w_c C + w_g G + w_e E + w_l L$) with configurable weights.
-    - Sensitivity heatmap visualization with `COLORMAP_TURBO`, tile ID labels, and embedded colorbar legend.
-    - CSV metrics export for offline statistical and research evaluation.
-  - Deterministic processing and strict numerical domain handling.
-  - Full automated unit test suite with 83 tests across Google Test and 13 CTest cases.
-- **Future Milestones**: AVX2 SIMD kernel acceleration & safe runtime dispatch (Phase 7), Hardware counter profiling (`perf`) and microbenchmarking (Phase 8), and research analysis.
+  - **SIMD Optimization & Verified Feature Safety (`mirage::simd`)**:
+    - Dynamic runtime dispatch: `--backend auto|scalar|avx2` with safe multi-feature validation requiring both AVX2 and FMA ISA extensions.
+    - Isolated compilation: only `src/simd/avx2_kernels.cpp` compiled with architecture flags (`-mavx2 -mfma`), avoiding global vector instruction emission.
+    - AVX2 FP32 Brightness and Contrast kernels (8 floats wide) with zero-cost scalar epilogue handling.
+    - Fused Brightness + Contrast kernel processing in registers, cutting DRAM memory bandwidth in half (achieving **1.89x–1.93x** speedup on 1080p/4K and **1.86x** on cache-resident tiles).
+    - AVX2 Saturation kernel processing 8 interleaved BGR pixels (24 floats) per iteration using `_mm256_permutevar8x32_ps` and `_mm256_blend_ps` (1.36x speedup on 1080p).
+    - Exact transcendental preservation: Power-law Gamma correction deliberately retained as scalar reference to prevent IEEE 754 numerical deviation.
+  - **Hardware Performance & Roofline Analysis (`docs/performance-analysis.md`)**:
+    - Direct in-process Linux `perf_event_open()` counter measurement (CPU cycles, instructions, IPC, cache references, cache misses, branch mispredictions).
+    - Roofline-style model and arithmetic intensity classification ($\mathcal{I} = \text{FLOPs}/\text{Byte}$), proving standalone Brightness/Contrast are memory-bound ($\mathcal{I} < 0.38$) and explaining why fusion delivers $1.9\times$ speedup while standalone vectorization yields negligible gains.
+    - Empirical investigation of software FP16 emulation overhead: establishes that emulated half-precision increases instructions by **$11.4\times$** and cycles by **$17.2\times$**, demonstrating that hardware FP16 support is required for adaptive precision speedup.
+    - Tile-size analysis demonstrating that $32\times 32$ pixels is optimal for high-definition imagery ($2.8\times$ faster analysis than $8\times 8$).
+    - Publication-grade automated charting pipeline producing 7 high-resolution plots via Cairo.
+  - Full automated unit test suite with 99 tests across 15 test suites and 14 CTest cases (100% pass rate).
 
 ## 4. Technology Stack
 
@@ -88,8 +93,11 @@ Mirage/
 │       │   ├── image_loader.hpp # Validating image I/O and normalization
 │       │   ├── color_converter.hpp # BGR, RGB, and scientific CIELAB conversions
 │       │   └── tile_manager.hpp # Spatial tiling and image reconstruction
-│       └── precision/
-│           └── adaptive_precision.hpp # Adaptive precision decision & tile dispatch
+│       ├── precision/
+│       │   └── adaptive_precision.hpp # Adaptive precision decision & tile dispatch
+│       └── simd/
+│           ├── simd_backend.hpp # Backend enum (Auto, Scalar, AVX2) & feature resolution
+│           └── avx2_kernels.hpp # AVX2 SIMD vectorized kernel declarations
 ├── src/                        # Internal implementations
 │   ├── main.cpp                # CLI application entry point
 │   ├── version.cpp             # Version metadata implementation
@@ -106,8 +114,11 @@ Mirage/
 │   │   ├── image_loader.cpp    # OpenCV I/O and float normalization
 │   │   ├── color_converter.cpp # Color transformation algorithms
 │   │   └── tile_manager.cpp    # Tile partitioning & reconstruction logic
-│   └── precision/
-│       └── adaptive_precision.cpp # Tile precision decision & enhancement pipeline
+│   ├── precision/
+│   │   └── adaptive_precision.cpp # Tile precision decision & enhancement pipeline
+│   └── simd/
+│       ├── simd_backend.cpp    # Backend resolution and validation
+│       └── avx2_kernels.cpp    # AVX2 vectorized implementations (-mavx2 isolated)
 ├── tests/                      # Automated unit and integration test suite
 │   ├── CMakeLists.txt
 │   ├── test_version.cpp
@@ -119,9 +130,12 @@ Mirage/
 │   ├── test_enhancement_engine.cpp
 │   ├── test_precision_engine.cpp
 │   ├── test_sensitivity_analyzer.cpp
-│   └── test_adaptive_precision.cpp
-├── benchmarks/                 # Microbenchmark suite (Google Benchmark)
-│   └── CMakeLists.txt
+│   ├── test_adaptive_precision.cpp
+│   └── test_simd.cpp           # SIMD equivalence, tail handling & dispatch tests
+├── benchmarks/                 # Microbenchmark suite
+│   ├── CMakeLists.txt
+│   ├── benchmark_cpu.cpp       # Google Benchmark CPU test
+│   └── benchmark_runner.cpp    # Standalone high-precision benchmarking suite
 ├── docs/                       # Architectural & development documentation
 │   ├── architecture.md
 │   └── development.md
@@ -192,9 +206,17 @@ cmake --build --preset release
 # Render and save tile visualization overlay
 ./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
 
-# Enhance an image using the uniform FP32 baseline engine
+# Enhance an image using the uniform FP32 baseline engine (with automatic AVX2 dispatch)
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_fp32.png \
-  --precision fp32 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+  --precision fp32 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0 --backend auto
+
+# Enhance forcing portable scalar reference backend
+./build/release/mirage --enhance sample_image.png --output output/enhanced_scalar.png \
+  --precision fp32 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0 --backend scalar
+
+# Enhance requesting AVX2 acceleration explicitly
+./build/release/mirage --enhance sample_image.png --output output/enhanced_avx2.png \
+  --precision fp32 --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0 --backend avx2
 
 # Enhance an image using uniform FP16 emulated arithmetic (with error reporting vs FP32)
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_fp16.png \
@@ -204,10 +226,13 @@ cmake --build --preset release
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_mixed.png \
   --precision mixed --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
 
-# Enhance an image using sensitivity-guided tile-based adaptive precision
+# Enhance an image using sensitivity-guided tile-based adaptive precision with AVX2
 ./build/release/mirage --enhance sample_image.png --output output/enhanced_adaptive.png \
   --precision adaptive --tile-size 32 --sensitivity-threshold 0.04 \
-  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
+  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0 --backend avx2
+
+# Run high-resolution performance benchmark suite (Small, 1080p, 4K)
+./build/release/benchmarks/mirage_benchmarks
 
 # Analyze tile-based image sensitivity and generate heatmap visualization and CSV report
 ./build/release/mirage --analyze-sensitivity sample_image.png --tile-size 32 \

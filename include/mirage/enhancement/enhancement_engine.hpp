@@ -6,6 +6,7 @@
 #include <opencv2/core.hpp>
 
 #include "mirage/enhancement/precision_config.hpp"
+#include "mirage/simd/simd_backend.hpp"
 
 namespace mirage::enhancement {
 
@@ -42,10 +43,12 @@ struct EnhancementConfig {
 };
 
 /**
- * @brief Color image enhancement engine supporting FP32, emulated FP16, and Mixed precision.
+ * @brief Color image enhancement engine supporting FP32 (Scalar & AVX2), emulated FP16, and Mixed precision.
  *
  * Provides:
- * - FP32 Reference Implementation (Phase 3 baseline).
+ * - Dynamic SIMD runtime dispatch (Auto, Scalar, AVX2).
+ * - Portable scalar reference implementation (fallback).
+ * - AVX2 vectorized implementations for Brightness, Contrast, Saturation, and Combined B+C.
  * - FP16 Emulation with explicit IEEE 754 binary16 rounding at arithmetic boundaries.
  * - Mixed Precision execution where operations are individually assigned to FP32 or FP16.
  *
@@ -59,21 +62,79 @@ struct EnhancementConfig {
  */
 class EnhancementEngine {
 public:
-    // --- FP32 Reference Kernels ---
-    [[nodiscard]] static cv::Mat adjust_brightness(const cv::Mat& src, float delta);
-    static void adjust_brightness(const cv::Mat& src, cv::Mat& dst, float delta);
+    // --- Unified FP32 API with Dynamic Backend Dispatch ---
+    [[nodiscard]] static cv::Mat adjust_brightness(
+        const cv::Mat& src,
+        float delta,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void adjust_brightness(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        float delta,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
-    [[nodiscard]] static cv::Mat adjust_contrast(const cv::Mat& src, float factor, float midpoint = 0.5f);
-    static void adjust_contrast(const cv::Mat& src, cv::Mat& dst, float factor, float midpoint = 0.5f);
+    [[nodiscard]] static cv::Mat adjust_contrast(
+        const cv::Mat& src,
+        float factor,
+        float midpoint = 0.5f,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void adjust_contrast(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        float factor,
+        float midpoint = 0.5f,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
-    [[nodiscard]] static cv::Mat adjust_saturation(const cv::Mat& src, float factor);
-    static void adjust_saturation(const cv::Mat& src, cv::Mat& dst, float factor);
+    [[nodiscard]] static cv::Mat adjust_saturation(
+        const cv::Mat& src,
+        float factor,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void adjust_saturation(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        float factor,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
-    [[nodiscard]] static cv::Mat adjust_gamma(const cv::Mat& src, float gamma);
-    static void adjust_gamma(const cv::Mat& src, cv::Mat& dst, float gamma);
+    [[nodiscard]] static cv::Mat adjust_gamma(
+        const cv::Mat& src,
+        float gamma,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void adjust_gamma(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        float gamma,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
-    [[nodiscard]] static cv::Mat process(const cv::Mat& src, const EnhancementConfig& config);
-    static void process(const cv::Mat& src, cv::Mat& dst, const EnhancementConfig& config);
+    [[nodiscard]] static cv::Mat adjust_brightness_contrast(
+        const cv::Mat& src,
+        float delta,
+        float factor,
+        float midpoint = 0.5f,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void adjust_brightness_contrast(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        float delta,
+        float factor,
+        float midpoint = 0.5f,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+
+    [[nodiscard]] static cv::Mat process(
+        const cv::Mat& src,
+        const EnhancementConfig& config,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+    static void process(
+        const cv::Mat& src,
+        cv::Mat& dst,
+        const EnhancementConfig& config,
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
+
+    // --- Explicit Portable Scalar Reference Kernels ---
+    static void adjust_brightness_scalar(const cv::Mat& src, cv::Mat& dst, float delta);
+    static void adjust_contrast_scalar(const cv::Mat& src, cv::Mat& dst, float factor, float midpoint = 0.5f);
+    static void adjust_saturation_scalar(const cv::Mat& src, cv::Mat& dst, float factor);
+    static void adjust_gamma_scalar(const cv::Mat& src, cv::Mat& dst, float gamma);
+    static void process_scalar(const cv::Mat& src, cv::Mat& dst, const EnhancementConfig& config);
 
     // --- FP16 Emulated Kernels (Explicit IEEE 754 binary16 rounding) ---
     [[nodiscard]] static cv::Mat adjust_brightness_fp16(const cv::Mat& src, float delta);
@@ -96,14 +157,16 @@ public:
         const cv::Mat& src,
         const EnhancementConfig& config,
         PrecisionMode mode = PrecisionMode::FP32,
-        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{});
+        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{},
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
     static void process_with_precision(
         const cv::Mat& src,
         cv::Mat& dst,
         const EnhancementConfig& config,
         PrecisionMode mode = PrecisionMode::FP32,
-        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{});
+        const MixedPrecisionPolicy& policy = MixedPrecisionPolicy{},
+        simd::ExecutionBackend backend = simd::ExecutionBackend::Auto);
 
     static void validate_image(const cv::Mat& image, const std::string& operation_name);
 };

@@ -12,7 +12,17 @@ if(TARGET GTest::gtest AND TARGET GTest::gtest_main)
         test_precision_engine.cpp
         test_sensitivity_analyzer.cpp
         test_adaptive_precision.cpp
+        test_simd.cpp
     )
+
+    check_cxx_compiler_flag("-mf16c" COMPILER_SUPPORTS_F16C)
+    if(COMPILER_SUPPORTS_AVX2)
+        set(TEST_SIMD_COMPILE_FLAGS ${AVX2_COMPILE_FLAGS})
+        if(COMPILER_SUPPORTS_F16C)
+            list(APPEND TEST_SIMD_COMPILE_FLAGS "-mf16c")
+        endif()
+        set_source_files_properties(test_simd.cpp PROPERTIES COMPILE_OPTIONS "${TEST_SIMD_COMPILE_FLAGS}")
+    endif()
 
     target_link_libraries(mirage_tests
         PRIVATE
@@ -59,4 +69,7 @@ if(TARGET mirage)
 
     add_test(NAME cli_test_enhance_adaptive_invalid_tile_size COMMAND mirage --enhance dummy.png --output out.png --precision adaptive --tile-size -10)
     set_tests_properties(cli_test_enhance_adaptive_invalid_tile_size PROPERTIES WILL_FAIL TRUE)
+
+    add_test(NAME cli_test_enhance_invalid_backend COMMAND mirage --enhance dummy.png --output out.png --backend invalid_backend)
+    set_tests_properties(cli_test_enhance_invalid_backend PROPERTIES WILL_FAIL TRUE)
 endif()

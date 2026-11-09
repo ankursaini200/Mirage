@@ -56,7 +56,8 @@ AdaptiveEnhancementResult AdaptivePrecisionEngine::enhance_adaptive(
     int tile_width,
     int tile_height,
     double threshold,
-    const analysis::SensitivityWeights& weights) {
+    const analysis::SensitivityWeights& weights,
+    simd::ExecutionBackend backend) {
     if (bgr_normalized.empty()) {
         throw AdaptivePrecisionException("Cannot perform adaptive enhancement on empty image.");
     }
@@ -88,7 +89,7 @@ AdaptiveEnhancementResult AdaptivePrecisionEngine::enhance_adaptive(
     cv::Mat dst(bgr_normalized.size(), bgr_normalized.type());
 
     // 6. Process each tile using its assigned precision
-    process_tiles(bgr_normalized, dst, tile_mgr, decision, config);
+    process_tiles(bgr_normalized, dst, tile_mgr, decision, config, backend);
 
     // End strictly timed section
     const auto end = std::chrono::high_resolution_clock::now();
@@ -108,7 +109,8 @@ void AdaptivePrecisionEngine::process_tiles(
     cv::Mat& dst_output,
     const image::TileManager& tile_mgr,
     const AdaptivePrecisionDecision& decision,
-    const enhancement::EnhancementConfig& config) {
+    const enhancement::EnhancementConfig& config,
+    simd::ExecutionBackend backend) {
     if (decision.assignments.size() != tile_mgr.total_tiles()) {
         throw AdaptivePrecisionException("Decision assignment count does not match tile manager tile count.");
     }
@@ -126,7 +128,7 @@ void AdaptivePrecisionEngine::process_tiles(
         cv::Mat tile_dst = dst_output(rect);
 
         if (assign.precision == enhancement::PrecisionMode::FP32) {
-            enhancement::EnhancementEngine::process(tile_src, tile_dst, config);
+            enhancement::EnhancementEngine::process(tile_src, tile_dst, config, backend);
         } else {
             enhancement::EnhancementEngine::process_fp16(tile_src, tile_dst, config);
         }

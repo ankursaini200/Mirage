@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(Mirage
-    VERSION 0.6.0
+    VERSION 0.8.0
     DESCRIPTION "Adaptive Precision for Software-Based Color Image Enhancement"
     LANGUAGES CXX
 )
@@ -60,11 +60,29 @@ if(MIRAGE_ENABLE_OPENCV)
     message(STATUS "OpenCV ${OpenCV_VERSION} found at ${OpenCV_DIR}")
 endif()
 
+# Architecture-specific AVX2 compile options for isolated kernels
+include(CheckCXXCompilerFlag)
+if(MSVC)
+    set(AVX2_COMPILE_FLAGS "/arch:AVX2")
+    set(COMPILER_SUPPORTS_AVX2 TRUE)
+else()
+    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+    check_cxx_compiler_flag("-mfma" COMPILER_SUPPORTS_FMA)
+    if(COMPILER_SUPPORTS_AVX2)
+        set(AVX2_COMPILE_FLAGS "-mavx2")
+        if(COMPILER_SUPPORTS_FMA)
+            list(APPEND AVX2_COMPILE_FLAGS "-mfma")
+        endif()
+    endif()
+endif()
+
 # Core Mirage Engine Library
 add_library(mirage_core
     src/version.cpp
     src/core/half.cpp
     src/cpu/cpu_features.cpp
+    src/simd/simd_backend.cpp
+    src/simd/avx2_kernels.cpp
     src/image/image_loader.cpp
     src/image/color_converter.cpp
     src/image/tile_manager.cpp
@@ -74,6 +92,15 @@ add_library(mirage_core
     src/precision/adaptive_precision.cpp
 )
 add_library(mirage::mirage_core ALIAS mirage_core)
+
+if(COMPILER_SUPPORTS_AVX2)
+    set_source_files_properties(src/simd/avx2_kernels.cpp
+        PROPERTIES COMPILE_OPTIONS "${AVX2_COMPILE_FLAGS}"
+    )
+    message(STATUS "AVX2 SIMD acceleration enabled for avx2_kernels.cpp: ${AVX2_COMPILE_FLAGS}")
+else()
+    message(STATUS "AVX2 not supported by compiler; using scalar stubs for avx2_kernels.cpp")
+endif()
 
 target_include_directories(mirage_core
     PUBLIC

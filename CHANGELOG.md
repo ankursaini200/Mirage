@@ -5,6 +5,62 @@ All notable changes to **Mirage** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-alpha] - 2026-11-10
+
+### Added
+- **SIMD Runtime Feature Safety Audit & Strict Multi-Feature Validation**:
+  - Audited compiled AVX2 object disassembly (`objdump -d`): confirmed presence of FMA instructions (`vfmadd132ps`, `vfmadd231ps`, `vfmadd132ss`) and absence of F16C instructions in `avx2_kernels.cpp.o`.
+  - Upgraded runtime backend validation (`is_backend_supported` and `resolve_backend`) to strictly verify both `has_avx2 && has_fma` before selecting or executing the AVX2 backend.
+  - Decoupled `-mf16c` from `avx2_kernels.cpp` compilation flags in `CMakeLists.txt`, isolating F16C strictly to unit test validation.
+  - Added unit tests for feature-dependent backend selection (`SimdBackendTest.FeatureDependentBackendSafety`) covering all combinations of missing or present AVX2 and FMA ISA extensions.
+- **Hardware Performance Counter Profiling (`mirage::benchmark::HardwarePerfSampler`)**:
+  - Direct in-process Linux `perf_event_open` hardware counter measurement harness sampling CPU cycles, instructions retired, cache references, cache misses, branch instructions, branch mispredictions, and task-clock time.
+  - Automated calculation of Instructions Per Cycle (IPC), cache miss percentage, and branch miss percentage.
+  - Graceful fallback with unavailable counter reporting (`N/A`) when running under restricted permissions.
+- **Roofline-Style Architectural Modeling & Arithmetic Intensity Analysis**:
+  - Formulated theoretical and implementation-based memory traffic and arithmetic intensity ($\mathcal{I} = \text{FLOPs} / \text{Byte}$) across all enhancement operations.
+  - Established machine roofline ridge point ($\mathcal{I}_{\text{ridge}} = 4.27 \text{ FLOP/Byte}$) on Intel Core i7-13650HX with dual-channel DDR5.
+  - Classified operations: Brightness, Contrast, Unfused B+C, and Saturation identified as strictly DRAM memory-bandwidth bound ($\mathcal{I} < 0.71$); Gamma and Sensitivity Analysis identified as compute-bound ($\mathcal{I} \ge 3.125$).
+  - Proved empirically why kernel fusion delivers $1.89\times–1.93\times$ speedups by halving DRAM traffic, while standalone element-wise vectorization yields minimal gains on large images.
+- **Empirical Software FP16 Emulation Overhead Analysis**:
+  - Measured hardware counters comparing native FP32 vs. software-emulated FP16 on 1080p: demonstrates an $11.4\times$ explosion in instructions retired (from 575M to 6.58B) and a $17.2\times$ increase in execution cycles, conclusively explaining why software-emulated adaptive precision cannot yield execution time savings without hardware FP16 execution units.
+- **Tile-Size Performance Trade-Off Analysis**:
+  - Evaluated nominal tile sizes $8\times 8$, $16\times 16$, $32\times 32$, and $64\times 64$ on 1080p Full HD.
+  - Demonstrated that $8\times 8$ tiling induces a $2.8\times$ latency penalty in sensitivity analysis (35.1 ms vs 12.5 ms) due to 32,400 loop boundaries and struct allocations.
+  - Established $32\times 32$ as the optimal architectural sweet spot balancing analysis overhead and spatial precision control.
+- **Publication-Grade Automated Visualization Pipeline (`scripts/plot_performance.py`)**:
+  - Implemented Cairo-based visualization script generating 7 high-resolution publication-quality PNG charts in `benchmarks/plots/`.
+- **Dedicated Performance Analysis Research Documentation**:
+  - Created `docs/performance-analysis.md` documenting environmental details, safety audits, benchmark tables, roofline calculations, research answers, negative results, and reproduction instructions.
+- Total automated unit tests increased to 99 across 15 test suites; 14 CTest test cases passing (100%).
+
+## [0.7.0-alpha] - 2026-11-10
+
+### Added
+- **SIMD Optimization Architecture & Safe Runtime Dispatch (`mirage::simd`)**:
+  - Implemented dynamic SIMD runtime dispatch supporting `ExecutionBackend::Auto`, `ExecutionBackend::Scalar`, and `ExecutionBackend::AVX2`.
+  - Non-global, isolated architecture compilation: only `src/simd/avx2_kernels.cpp` is built with architecture flags (`-mavx2 -mfma -mf16c` on GCC/Clang, `/arch:AVX2` on MSVC); the core library and binary remain strictly portable across non-AVX2 CPUs.
+  - Safe host detection: dispatches to AVX2 only when verified via runtime CPUID and OSXSAVE; falls back seamlessly to scalar implementation with zero illegal instruction traps (`#UD`).
+  - Added CLI flag `--backend <auto|scalar|avx2>` to `--enhance`.
+  - Updated `--info` command to display detected AVX2, F16C, FMA support, and default resolved backend.
+- **AVX2 FP32 Vectorized Image Enhancement Kernels**:
+  - **Vectorized Brightness**: 8-wide single-precision float (`__m256`) processing using `_mm256_add_ps` and clamping with `_mm256_max_ps` / `_mm256_min_ps`.
+  - **Vectorized Contrast**: 8-wide float processing using `_mm256_sub_ps`, `_mm256_mul_ps`, and `_mm256_add_ps` around configurable midpoints.
+  - **Fused Brightness + Contrast**: Single-pass register processing eliminating intermediate memory read/write passes, achieving **1.81x–1.90x** speedup on 1080p and 4K images and **3.31x** on cache-resident tiles.
+  - **Vectorized Rec. 709 Saturation**: Vectorized across 8 interleaved BGR pixels (24 floats) per iteration using `_mm256_permutevar8x32_ps` and `_mm256_blend_ps` cross-lane permutations, achieving bit-identical or $\le 1\times 10^{-6}$ numerical parity.
+  - **Exact Transcendental Accuracy Preservation**: Power-law Gamma correction deliberately retained as scalar reference to maintain exact IEEE 754 precision without inaccurate polynomial approximations or heavy external math dependencies.
+  - Scalar epilogue tail loops handling non-vector-aligned widths, odd dimensions, and partial boundary tiles.
+- **F16C Hardware vs. Software Emulation Investigation**:
+  - Investigated hardware F16C conversion (`vcvtps2ph` / `vcvtph2ps`) against software-emulated binary16 rounding.
+  - Documented that while F16C provides single-instruction hardware format conversion for normal floats, intermediate software arithmetic emulation requires scalar IEEE-754 semantics to prevent divergence in subnormal/FTZ modes, preserving scalar FP16 as reference.
+- **Comprehensive Benchmarking Suite (`benchmarks/mirage_benchmarks`)**:
+  - Implemented standalone high-resolution benchmark runner testing Small (190x130), 1080p Full HD (1920x1080, 2.07 MP), and 4K UHD (3840x2160, 8.29 MP).
+  - Protocol: 5 warmup iterations, 20 measurement iterations, reporting Median, Min, Max, StdDev, Throughput (Megapixels/sec), and measured speedup ratios.
+- **Automated Test Suite Expansion**:
+  - Added `tests/test_simd.cpp` containing 15 comprehensive unit tests covering scalar vs. AVX2 numerical equivalence, clamping extremes, non-vector-aligned dimensions, small images (1x1, 2x2, 3x5), partial boundary tiles, determinism, runtime dispatch, invalid backend exception handling, and F16C equivalence.
+  - Added CLI integration test `cli_test_enhance_invalid_backend`.
+  - Total automated unit tests increased to 98 across 15 test suites; 14 CTest test cases passing (100%).
+
 ## [0.6.0-alpha] - 2026-11-09
 
 ### Added

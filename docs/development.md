@@ -237,6 +237,41 @@ The test suite in `tests/` covers 83 automated tests across 10 test suites:
     - Deterministic end-to-end adaptive output.
     - Preservation of image dimensions and `CV_32FC3` format.
     - Relative $L_2$ error calculation and zero-reference stability.
+11. `SimdBackendTest`:
+    - Parsing backend strings ("auto", "scalar", "avx2") with case-insensitivity and invalid option handling.
+    - Backend availability detection and host feature resolution.
+12. `Avx2KernelsTest`:
+    - Brightness scalar vs. AVX2 numerical bit-identity across positive, negative, and zero deltas.
+    - Contrast scalar vs. AVX2 equivalence around standard and non-standard midpoints.
+    - Saturation scalar vs. AVX2 numerical parity ($\le 1 \times 10^{-6}$, bounded by single-precision ULP).
+    - Fused Brightness + Contrast equivalence vs. sequential scalar execution.
+    - Clamping behavior at $0.0$ and $1.0$ under extreme inputs.
+    - Non-vector-aligned widths (widths 1, 2, 3, 5, 7, 9, 11, 13, 15, 17, 31, 33) and odd dimensions.
+    - Small images (1x1, 2x2, 3x5).
+    - Partial boundary tile submatrices under zero-copy views.
+    - Bit-identical deterministic execution across repeated runs.
+13. `EnhancementEngineDispatchTest`:
+    - Verification of `Auto`, `Scalar`, and `AVX2` dispatch routes through `EnhancementEngine::process`.
+    - Exception handling when an unsupported backend is requested.
+14. `AdaptiveEngineDispatchTest`:
+    - Verification of adaptive precision pipeline under `backend = AVX2` and `backend = Scalar`.
+15. `F16CInvestigationTest`:
+    - Verification of hardware `vcvtps2ph` / `vcvtph2ps` conversion against software `Half` rounding.
+
+## Compiler Auto-Vectorization & Assembly Findings
+
+Compiler auto-vectorization analysis was conducted using GCC (`-fopt-info-vec-all`) and Clang (`-Rpass=loop-vectorize -Rpass-analysis=loop-vectorize`):
+- **GCC Findings**:
+  - Without architecture-specific flags, GCC auto-vectorizes scalar Brightness, Contrast, and Saturation using 128-bit SSE vectors (`16 byte vectors`) with unroll factor 4.
+  - However, GCC inserts runtime loop versioning checks to guard against potential pointer aliasing between `src_ptr` and `dst_ptr`.
+  - Gamma correction is **not vectorized** by GCC due to `std::powf` (external call without vector math runtime).
+- **Clang Findings**:
+  - Clang reports `loop not vectorized: Cannot vectorize uncountable loop` for inner pixel loops because matrix column counts are retrieved from class structures.
+  - Clang misses auto-vectorization on complex 3-channel interleaved structures without manual unrolling.
+- **AVX2 Hand-Vectorized Intrinsics Advantage**:
+  - Manual AVX2 vectorization (`src/simd/avx2_kernels.cpp`) guarantees direct 256-bit YMM register utilization (`vaddps`, `vsubps`, `vmulps`, `vminps`, `vmaxps`, `vpermps`, `vblendps`).
+  - Eliminates runtime aliasing versioning overhead.
+  - Fuses Brightness and Contrast in registers, eliminating 50% of DRAM memory traffic.
 
 ## Multi-Compiler Validation
 
@@ -252,4 +287,41 @@ ctest --test-dir build/clang --output-on-failure
 cmake -B build/gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_BUILD_TYPE=Release
 cmake --build build/gcc -j$(nproc)
 ctest --test-dir build/gcc --output-on-failure
+
+# Running Standalone Benchmark Suite with Hardware Performance Counters
+./build/release/benchmarks/mirage_benchmarks
+
+# Quick mode (fewer iterations for rapid CI/CD verification)
+./build/release/benchmarks/mirage_benchmarks --quick
+
+# Specify custom CSV destination directory
+./build/release/benchmarks/mirage_benchmarks --csv-dir benchmarks/results
+
+# Generating publication-grade performance charts
+python3 scripts/plot_performance.py
+
+# Running Linux perf CLI profiling wrapper
+./scripts/run_perf.sh
 ```
+
+## Hardware Performance Counter Profiling
+
+Mirage includes native, in-process hardware performance counter sampling via the Linux `perf_event_open()` syscall (`mirage::benchmark::HardwarePerfSampler`). Counters tracked include:
+- `PERF_COUNT_HW_CPU_CYCLES`
+- `PERF_COUNT_HW_INSTRUCTIONS`
+- `PERF_COUNT_HW_CACHE_REFERENCES`
+- `PERF_COUNT_HW_CACHE_MISSES`
+- `PERF_COUNT_HW_BRANCH_INSTRUCTIONS`
+- `PERF_COUNT_HW_BRANCH_MISSES`
+- `PERF_COUNT_SW_TASK_CLOCK`
+
+Calculated metrics:
+- $\text{IPC} = \text{Instructions} / \text{Cycles}$
+- $\text{Cache Miss Rate} = (\text{Cache Misses} / \text{Cache References}) \times 100\%$
+
+Output files generated:
+- `benchmarks/results/benchmark_results.csv`
+- `benchmarks/results/tile_analysis.csv`
+- `benchmarks/plots/*.png` (7 publication charts)
+
+For comprehensive analysis and findings, consult [`docs/performance-analysis.md`](performance-analysis.md).
