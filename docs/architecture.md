@@ -16,7 +16,7 @@ Mirage evaluates a tile-based approach:
 ```
 +-----------------------------------------------------------------------------------+
 |                                 Application Layer                                 |
-|                 (CLI: --image-info, --tile-info, --visualize-tiles)               |
+|          (CLI: --enhance, --image-info, --tile-info, --visualize-tiles)           |
 +------------------------------------------+----------------------------------------+
                                            |
 +------------------------------------------v----------------------------------------+
@@ -29,7 +29,6 @@ Mirage evaluates a tile-based approach:
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
 |   |                     Image Processing & Tiling Subsystem                   |   |
-|   |                                                                           |   |
 |   |   +-------------------+   +--------------------+   +------------------+   |   |
 |   |   |    ImageLoader    |   |   ColorConverter   |   |   TileManager    |   |   |
 |   |   |  - JPG/PNG/BMP    |   |  - BGR <-> RGB     |   |  - Configurable  |   |   |
@@ -39,12 +38,22 @@ Mirage evaluates a tile-based approach:
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
+|   |              Baseline Uniform FP32 Enhancement Engine (Phase 3)           |   |
+|   |   +-------------------+   +--------------------+   +------------------+   |   |
+|   |   | Brightness Shift  |   | Contrast Midpoint  |   | Saturation Rec709|   |   |
+|   |   +-------------------+   +--------------------+   +------------------+   |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   |   | Gamma Correction (Power Law) & Deterministic Pipeline             |   |   |
+|   |   +-------------------------------------------------------------------+   |   |
+|   +---------------------------------------------------------------------------+   |
+|                                                                                   |
+|   +---------------------------------------------------------------------------+   |
 |   |                    Hardware Abstraction & SIMD Dispatch                   |   |
 |   |              (Safe CPUID, OSXSAVE, AVX2 / F16C / FMA Detection)           |   |
 |   +---------------------------------------------------------------------------+   |
 |                                                                                   |
 |   +---------------------------------------------------------------------------+   |
-|   |             [Future Phases: Sensitivity Analysis, SIMD Kernels]           |   |
+|   |             [Future Phases: Sensitivity Analysis, FP16/SIMD Kernels]      |   |
 |   +---------------------------------------------------------------------------+   |
 +-----------------------------------------------------------------------------------+
 ```
@@ -62,8 +71,8 @@ Mirage evaluates a tile-based approach:
 ## 3. Phase 2 Architecture: Image Ingestion, Color Space & Tiling
 
 ### 3.1 ImageLoader (`mirage::image::ImageLoader`)
-- **Format Support**: JPG, JPEG, PNG, BMP.
-- **Strict Validation**: Checks file existence, non-zero file size, valid magic headers, and expected channel structure (`CV_8UC3`, BGR).
+- **Format Support**: Ingests JPG, JPEG, PNG, and BMP files.
+- **Strict Validation**: Validates file existence, non-zero file sizes, and channel integrity (`CV_8UC3`, BGR).
 - **Graceful Error Handling**: Custom exception hierarchy (`FileNotFoundException`, `UnsupportedFormatException`, `CorruptedImageException`, `EmptyImageException`).
 - **Precision Normalization**: Converts raw 8-bit unsigned images (`CV_8UC3` in $[0, 255]$) into normalized 32-bit floating-point matrices (`CV_32FC3` in $[0.0, 1.0]$) via $x / 255.0f$, with inverse denormalization.
 
@@ -75,22 +84,54 @@ Mirage evaluates a tile-based approach:
     - $L^* \in [0.0, 100.0]$ (Perceptual Lightness)
     - $a^* \in [-127.0, +127.0]$ (Green-to-Red chromaticity)
     - $b^* \in [-127.0, +127.0]$ (Blue-to-Yellow chromaticity)
-  - Distinguishes floating-point CIELAB from legacy 8-bit quantized Lab ($L \in [0, 255]$, $a, b \in [0, 255]$) to eliminate quantization errors in scientific pathways.
-  - Symmetrical inverse mapping (`lab_to_bgr`) with deterministic reconstruction.
+  - Symmetrical `lab_to_bgr` reconstruction with verified numerical tolerance.
 
 ### 3.3 TileManager (`mirage::image::TileManager`)
 - **Configurable Spatial Partitioning**: Decomposes images into arbitrary $T_w \times T_h$ rectangular tiles (8x8, 16x16, 32x32, 64x64, or custom).
-- **Non-Divisible Boundary Clamping**: When image dimensions $W, H$ are not evenly divisible by tile dimensions:
+- **Non-Divisible Boundary Clamping**: Computes clipped tile dimensions on edges:
   $$W_{\text{tile}}(c) = \min(T_w, W - c \cdot T_w), \quad H_{\text{tile}}(r) = \min(T_h, H - r \cdot T_h)$$
-  Boundary tiles are clamped to valid pixel boundaries, preventing any out-of-bounds memory accesses.
-- **Zero-Copy Tile Representation**: Each `Tile` holds an OpenCV ROI submatrix (`cv::Mat view`) that points directly into the source image buffer with identical row pitch.
+- **Zero-Copy Tile Representation**: Each `Tile` holds an OpenCV ROI submatrix (`cv::Mat view`) pointing directly into the parent image buffer.
 - **Lossless Reconstruction**: `reconstruct_image()` reassembles constituent tiles into a contiguous matrix, verified pixel-by-pixel with $\ell_\infty$ norm difference of $0.0$.
-- **Inspection & Visualization**: `render_tile_overlay()` and `save_tile_visualization()` generate annotated overlays displaying tile boundaries and numerical IDs.
 
-## 4. Future Architectural Roadmap
+## 4. Phase 3 Architecture: Baseline Uniform FP32 Enhancement Engine
 
-- **Phase 3**: Sensitivity Analysis Metrics (local variance, gradient energy, chromatic complexity) & Precision Selection Engine.
-- **Phase 4**: Multi-Precision Kernels (FP32, FP16 storage/emulation, INT8 quantization).
+The `EnhancementEngine` (`mirage::enhancement::EnhancementEngine`) provides the deterministic, uniform single-precision floating-point reference implementation against which future reduced-precision (FP16, INT8) and adaptive-precision kernels will be validated.
+
+### 4.1 Mathematical Operations
+
+All operations operate on normalized `CV_32FC3` matrices with values in $[0.0, 1.0]$.
+
+1. **Additive Brightness Adjustment**:
+   $$I_{\text{out}}(c) = \text{clamp}(I_{\text{in}}(c) + \delta, 0.0, 1.0), \quad \delta \in [-1.0, 1.0]$$
+   - Parameter: `--brightness <val>` (default: `0.0`, identity).
+
+2. **Midpoint Contrast Scaling**:
+   $$I_{\text{out}}(c) = \text{clamp}(M + \alpha \cdot (I_{\text{in}}(c) - M), 0.0, 1.0), \quad \alpha \ge 0.0, \; M = 0.5$$
+   - Multiplies pixel deviation from neutral mid-gray ($M = 0.5$).
+   - Parameter: `--contrast <val>` (default: `1.0`, identity).
+
+3. **Luminance-Preserving Saturation Adjustment**:
+   Calculates Rec. 709 luminance in BGR channel ordering:
+   $$Y = 0.114 \cdot B + 0.587 \cdot G + 0.299 \cdot R$$
+   Scales color chromaticity relative to luminance:
+   $$C_{\text{out}} = \text{clamp}(Y + s \cdot (C_{\text{in}} - Y), 0.0, 1.0), \quad s \ge 0.0, \; C \in \{B, G, R\}$$
+   - When $s = 0.0$, produces pure Rec. 709 grayscale ($B_{\text{out}} = G_{\text{out}} = R_{\text{out}} = Y$).
+   - When $B = G = R$, $(C - Y) = 0$, so saturation scaling preserves grayscale neutrals without color casts.
+   - Parameter: `--saturation <val>` (default: `1.0`, identity).
+
+4. **Power-Law Gamma Transformation**:
+   $$I_{\text{out}}(c) = \text{clamp}\left(I_{\text{in}}(c)^{\frac{1}{\gamma}}, 0.0, 1.0\right), \quad \gamma > 0.0$$
+   - Applies exponential companding; $\gamma > 1.0$ brightens midtones/shadows, $\gamma < 1.0$ deepens contrast.
+   - Parameter: `--gamma <val>` (default: `1.0`, identity).
+
+### 4.2 Pipeline Processing Sequence
+
+To guarantee numerical reproducibility across future precision variants, operations execute in a strict, fixed order:
+$$\text{Input} \longrightarrow \text{Brightness} \longrightarrow \text{Contrast} \longrightarrow \text{Saturation} \longrightarrow \text{Gamma} \longrightarrow \text{Output}$$
+
+## 5. Future Architectural Roadmap
+
+- **Phase 4**: Multi-Precision Kernels (FP16 storage & emulation, INT8 quantization) & Adaptive Tiling Engine.
 - **Phase 5**: AVX2 SIMD Kernel Acceleration with Safe Runtime Dispatch.
 - **Phase 6**: Hardware Counter Profiling (`perf`), Google Benchmark Microbenchmarks, and Python-based Research Evaluation.
 - **Phase 7**: Interactive Desktop GUI (PySide6) and Continuous Integration.

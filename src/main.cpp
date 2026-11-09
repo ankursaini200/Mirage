@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "mirage/cpu/cpu_features.hpp"
+#include "mirage/enhancement/enhancement_engine.hpp"
 #include "mirage/image/image_loader.hpp"
 #include "mirage/image/tile_manager.hpp"
 #include "mirage/version.hpp"
@@ -24,7 +25,14 @@ void print_help(std::string_view program_name) {
               << "  --tile-info <image_path> --tile-size <size>\n"
               << "                                      Inspect tile partitioning and boundary tiles\n"
               << "  --visualize-tiles <image_path> --tile-size <size> [--output <path>]\n"
-              << "                                      Render and save tile grid visualization\n";
+              << "                                      Render and save tile grid visualization\n\n"
+              << "Enhancement Options:\n"
+              << "  --enhance <input_path> --output <output_path>\n"
+              << "                                      Run uniform FP32 baseline enhancement pipeline\n"
+              << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
+              << "    [--contrast <val>]                Contrast factor >= 0.0 (default: 1.0)\n"
+              << "    [--saturation <val>]              Saturation factor >= 0.0 (default: 1.0)\n"
+              << "    [--gamma <val>]                   Gamma exponent > 0.0 (default: 1.0)\n";
 }
 
 void print_version() {
@@ -63,7 +71,6 @@ int handle_image_info(const std::filesystem::path& image_path) {
 
 int parse_tile_size(const std::string& size_str) {
     try {
-        // Handle either "32" or "32x32"
         const size_t x_pos = size_str.find('x');
         if (x_pos != std::string::npos) {
             return std::stoi(size_str.substr(0, x_pos));
@@ -150,6 +157,35 @@ int handle_visualize_tiles(const std::filesystem::path& image_path,
     }
 }
 
+int handle_enhance(const std::filesystem::path& input_path,
+                   const std::filesystem::path& output_path,
+                   const mirage::enhancement::EnhancementConfig& config) {
+    try {
+        config.validate();
+
+        const cv::Mat u8_in = mirage::image::ImageLoader::load(input_path);
+        const cv::Mat f32_in = mirage::image::ImageLoader::normalize_to_float32(u8_in);
+
+        const cv::Mat f32_out = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+        const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(f32_out);
+
+        mirage::image::ImageLoader::save(output_path, u8_out);
+
+        std::cout << "Image enhancement completed successfully:\n"
+                  << "  Input:        " << input_path.string() << "\n"
+                  << "  Output:       " << output_path.string() << "\n"
+                  << "  Dimensions:   " << u8_in.cols << " x " << u8_in.rows << "\n"
+                  << "  Brightness:   " << (config.enable_brightness ? std::to_string(config.brightness) : "disabled") << "\n"
+                  << "  Contrast:     " << (config.enable_contrast ? std::to_string(config.contrast) : "disabled") << "\n"
+                  << "  Saturation:   " << (config.enable_saturation ? std::to_string(config.saturation) : "disabled") << "\n"
+                  << "  Gamma:        " << (config.enable_gamma ? std::to_string(config.gamma) : "disabled") << "\n";
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error in image enhancement: " << e.what() << "\n";
+        return 1;
+    }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -221,6 +257,76 @@ int main(int argc, char* argv[]) {
         } else {
             return handle_tile_info(image_path, tile_size);
         }
+    }
+
+    if (args[0] == "--enhance") {
+        std::filesystem::path input_path;
+        std::filesystem::path output_path;
+        mirage::enhancement::EnhancementConfig config{};
+
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--output" || args[i] == "-o") {
+                if (i + 1 < args.size()) {
+                    output_path = args[++i];
+                }
+            } else if (args[i] == "--brightness") {
+                if (i + 1 < args.size()) {
+                    try {
+                        config.brightness = std::stof(std::string(args[++i]));
+                        config.enable_brightness = true;
+                    } catch (...) {
+                        std::cerr << "Error: Invalid float value for --brightness\n";
+                        return 1;
+                    }
+                }
+            } else if (args[i] == "--contrast") {
+                if (i + 1 < args.size()) {
+                    try {
+                        config.contrast = std::stof(std::string(args[++i]));
+                        config.enable_contrast = true;
+                    } catch (...) {
+                        std::cerr << "Error: Invalid float value for --contrast\n";
+                        return 1;
+                    }
+                }
+            } else if (args[i] == "--saturation") {
+                if (i + 1 < args.size()) {
+                    try {
+                        config.saturation = std::stof(std::string(args[++i]));
+                        config.enable_saturation = true;
+                    } catch (...) {
+                        std::cerr << "Error: Invalid float value for --saturation\n";
+                        return 1;
+                    }
+                }
+            } else if (args[i] == "--gamma") {
+                if (i + 1 < args.size()) {
+                    try {
+                        config.gamma = std::stof(std::string(args[++i]));
+                        config.enable_gamma = true;
+                    } catch (...) {
+                        std::cerr << "Error: Invalid float value for --gamma\n";
+                        return 1;
+                    }
+                }
+            } else if (input_path.empty()) {
+                input_path = args[i];
+            }
+        }
+
+        if (input_path.empty()) {
+            std::cerr << "Error: Missing input image path for --enhance\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        if (output_path.empty()) {
+            std::cerr << "Error: Missing required --output parameter for --enhance\n";
+            print_help(argv[0]);
+            return 1;
+        }
+
+        return handle_enhance(input_path, output_path, config);
     }
 
     std::cerr << "Error: Unrecognized option '" << args[0] << "'\n\n";

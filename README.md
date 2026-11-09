@@ -25,17 +25,18 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 2 — Image Input, Color Conversion, and Tile Management
+- **Current Milestone**: Phase 3 — Baseline Uniform FP32 Image Enhancement Engine
 - **Active Capabilities**:
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
   - Safe, multi-tier CPU feature detection (x86_64 CPUID, OSXSAVE, and XCR0 verification for AVX2 without executing illegal instructions).
-  - Validated image loader supporting JPG, JPEG, PNG, and BMP with corrupted file and empty file rejection.
+  - Validated image loader supporting JPG, JPEG, PNG, and BMP with corrupted and empty file rejection.
   - Color space conversion between BGR, RGB, and scientific floating-point CIELAB ($L^* \in [0, 100]$, $a^*, b^* \in [-127, 127]$).
   - Spatial tile manager with non-divisible boundary clamping, zero-copy ROI views, and lossless reconstruction.
-  - Tile grid visualization overlays with configurable tile dimensions and border annotations.
-  - Automated unit test suite with 34 tests executed across Google Test and CTest.
-- **Future Milestones**: Sensitivity analysis (Phase 3), multi-precision kernels (Phase 4), AVX2 SIMD acceleration & runtime dispatch (Phase 5), and benchmarks with `perf` profiling (Phase 6).
+  - Uniform FP32 reference enhancement engine implementing additive brightness, midpoint contrast, Rec. 709 luminance-preserving saturation, and power-law gamma correction.
+  - Deterministic processing order ($\text{Brightness} \to \text{Contrast} \to \text{Saturation} \to \text{Gamma}$).
+  - Full automated unit test suite with 41 tests across Google Test and CTest.
+- **Future Milestones**: Multi-precision kernels & adaptive tiling (Phase 4), AVX2 SIMD acceleration & runtime dispatch (Phase 5), and benchmarks with `perf` profiling (Phase 6).
 
 ## 4. Technology Stack
 
@@ -60,6 +61,8 @@ Mirage/
 │       ├── version.hpp         # Versioning and compiler identification
 │       ├── cpu/
 │       │   └── cpu_features.hpp # CPU architecture and feature detection
+│       ├── enhancement/
+│       │   └── enhancement_engine.hpp # Uniform FP32 enhancement pipeline
 │       └── image/
 │           ├── image_loader.hpp # Validating image I/O and normalization
 │           ├── color_converter.hpp # BGR, RGB, and scientific CIELAB conversions
@@ -69,6 +72,8 @@ Mirage/
 │   ├── version.cpp             # Version metadata implementation
 │   ├── cpu/
 │   │   └── cpu_features.cpp    # CPUID and OSXSAVE feature detection
+│   ├── enhancement/
+│   │   └── enhancement_engine.cpp # Reference FP32 enhancement kernels
 │   └── image/
 │       ├── image_loader.cpp    # OpenCV I/O and float normalization
 │       ├── color_converter.cpp # Color transformation algorithms
@@ -79,7 +84,8 @@ Mirage/
 │   ├── test_cpu_features.cpp
 │   ├── test_image_loader.cpp
 │   ├── test_color_converter.cpp
-│   └── test_tile_manager.cpp
+│   ├── test_tile_manager.cpp
+│   └── test_enhancement_engine.cpp
 ├── benchmarks/                 # Microbenchmark suite (Google Benchmark)
 │   └── CMakeLists.txt
 ├── docs/                       # Architectural & development documentation
@@ -151,6 +157,10 @@ cmake --build --preset release
 
 # Render and save tile visualization overlay
 ./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
+
+# Enhance an image using the uniform FP32 baseline engine
+./build/release/mirage --enhance sample_image.png --output output/enhanced.png \
+  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
 ```
 
 ## 8. Testing Instructions

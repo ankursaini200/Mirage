@@ -46,19 +46,19 @@ cmake --build --preset release
 ## Running the Mirage CLI
 
 ```bash
-# Inspect basic system information
+# General Information
 ./build/release/mirage --info
 ./build/release/mirage --version
 ./build/release/mirage --help
 
-# Inspect image metadata (channels, dimensions, bit depth, color space)
+# Image Metadata & Tiling
 ./build/release/mirage --image-info sample_image.png
-
-# Inspect tile partitioning for non-divisible dimensions
 ./build/release/mirage --tile-info sample_image.png --tile-size 32
-
-# Render and save tile visualization overlay
 ./build/release/mirage --visualize-tiles sample_image.png --tile-size 32 --output output/tile_vis.png
+
+# Image Enhancement (Uniform FP32 Reference Baseline)
+./build/release/mirage --enhance sample_image.png --output output/enhanced.png \
+  --brightness 0.1 --contrast 1.2 --saturation 1.3 --gamma 1.0
 ```
 
 ## Running Tests
@@ -78,12 +78,20 @@ ctest --test-dir build/debug --output-on-failure
 
 ## Test Suite Structure
 
-The test suite in `tests/` covers:
+The test suite in `tests/` covers 41 automated tests across 6 test suites:
 1. `VersionTest`: Semantic versioning, C++ standard detection, and compiler string reporting.
 2. `CpuFeaturesTest`: CPUID querying, AVX2 availability, OSXSAVE validation, and string formatting.
 3. `ImageLoaderTest`: File existence checks, supported formats (JPG, PNG, BMP), corrupted and empty file handling, and float normalization.
 4. `ColorConverterTest`: BGR to RGB channel reordering, RGB to BGR symmetry, scientific CIELAB numerical range validity, known reference colors (black, white), and input validation.
 5. `TileManagerTest`: 8x8, 16x16, 32x32, and 64x64 grid divisions, non-divisible image dimensions, boundary tile clamping, single-pixel handling, unique tile IDs, and lossless image reconstruction.
+6. `EnhancementEngineTest`:
+   - Additive brightness adjustment and upper/lower boundary clamping.
+   - Contrast enhancement around neutral midpoint ($M = 0.5$).
+   - Luminance-preserving saturation adjustment and grayscale neutral invariance.
+   - Power-law gamma transformation.
+   - Parameter range validation (rejecting negative contrast, gamma $\le 0$, etc.).
+   - Output dimension and `CV_32FC3` type preservation.
+   - Deterministic and bit-identical repeated execution.
 
 ## Multi-Compiler Validation
 

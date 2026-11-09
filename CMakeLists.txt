@@ -67,6 +67,7 @@ add_library(mirage_core
     src/image/image_loader.cpp
     src/image/color_converter.cpp
     src/image/tile_manager.cpp
+    src/enhancement/enhancement_engine.cpp
 )
 add_library(mirage::mirage_core ALIAS mirage_core)
 
