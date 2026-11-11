@@ -400,6 +400,72 @@ For complete performance tables, charts, and reproduction commands, refer to [`d
 
 For complete research results and Pareto frontiers, refer to [`docs/research-results.md`](research-results.md).
 
-## 11. Future Architectural Roadmap
+## 11. Phase 10 Architecture: Mirage Dark Creative Studio Desktop Application
 
-- **Phase 10**: Interactive Desktop GUI (PySide6 / C++ Bindings) and Live Heatmap Visualization.
+### 11.1 Architectural Separation & QProcess IPC
+Phase 10 implements the desktop GUI studio using PySide6 decoupled from the core C++ engine:
+- **No Python Runtime in C++**: The C++ core (`mirage_core`) and CLI (`mirage`) remain completely free of Python C-API dependencies and foreign process managers.
+- **Asynchronous QProcess Pipeline**: The Python GUI spawns `./build/release/mirage` via Qt's asynchronous `QProcess`, preventing GUI main thread starvation or UI freezing during intensive image enhancement pipelines.
+- **Zero Fabrication Guarantee**: The GUI displays only real measured execution times from the current session or verified benchmark records from `benchmarks/results/benchmark_results.csv`, strictly prohibiting interpolated, synthetic, or fabricated runtimes.
+
+```
++-------------------------------------------------------------------------------+
+|                      PySide6 Dark Creative Studio (GUI)                       |
+|  - SplitImageViewer (Interactive < | > slider, smooth zoom/pan, badges)      |
+|  - DonutChartWidget (Real-time FP32 / FP16 spatial tile allocation vector)    |
+|  - PerformanceBarChart (Measured hardware execution latency in ms)           |
+|  - HeatmapOverlayViewer (TURBO sensitivity heatmap, precision grid, diff)    |
+|  - FilmstripCarousel (Ribbon thumbnail selector across 7 modalities)          |
++---------------------------------------+---------------------------------------+
+                                        |
+                 QProcess (Async CLI Execution with --json)
+                                        |
++---------------------------------------v---------------------------------------+
+|                       Mirage C++20 Core Executable                            |
+|  - mirage --enhance <input> --output <out> --precision adaptive --json        |
+|           --tile-size <N> --sensitivity-threshold <tau>                      |
+|           --save-heatmap <hpath> --save-precision-map <pmpath>                |
++---------------------------------------+---------------------------------------+
+                                        |
+                          JSON Stream over stdout
+                                        |
++---------------------------------------v---------------------------------------+
+| {                                                                             |
+|   "status": "success",                                                        |
+|   "image": { "width": 512, "height": 512, "channels": 3 },                    |
+|   "runtime": { "is_measured": true, "measured_pipeline_ms": 286.13 },         |
+|   "tile_allocation": { "total_tiles": 256, "fp32_count": 29, ... },          |
+|   "quality_metrics_vs_fp32_reference": { "psnr_db": 71.44, "ssim": 1.0, ... }|
+| }                                                                             |
++-------------------------------------------------------------------------------+
+```
+
+### 11.2 Structured JSON Contract
+The C++ CLI provides structured telemetry when invoked with `--json`:
+- `--info --json`: Returns project metadata, compiler information, CPU architecture, and detected SIMD ISA features (`avx2`, `fma`, `f16c`).
+- `--enhance ... --json`: Returns image dimensions, configuration parameters, measured pipeline execution time, per-tile precision assignments with sensitivity scores, hardware CPU feature flags, and perceptual error metrics ($\text{PSNR}$, $\text{SSIM}$, $\text{mean } \Delta E_{00}$, $\text{max } \Delta E_{00}$, $\text{relative } L_2$) computed strictly against the true FP32 scalar ground-truth reference image.
+- Overlay artifact exports: `--save-heatmap <path>` exports the TURBO sensitivity heatmap, and `--save-precision-map <path>` exports the tile precision overlay blending the original image with blue (FP32) and green (FP16) tile rectangles.
+
+### 11.3 Typography Policy & Fallback Verification
+The GUI enforces the approved typography policy:
+- Searches `assets/fonts/` and system fonts for `CODE Bold` and `CODE Regular`.
+- When unavailable, logs an explicit console notice and cleanly falls back to standard system monospaced fonts (`Fira Code`, `JetBrains Mono`, `DejaVu Sans Mono`, `monospace`) without silently obscuring the missing approved fonts.
+
+### 11.4 Research Integrity & Random Ablation Distinction
+The 30-seed random allocation policy is treated strictly as an experimental ablation protocol rather than an active enhancement configuration:
+- In the GUI, selecting the 30-seed random policy navigates directly to the Research Experiments view.
+- Displays aggregate statistical distributions ($\text{mean} \pm \text{std}$) across all 30 seeds, preserving the empirical distinction between guided precision and random tile budgets.
+
+## 12. Project Conclusion & Verification Summary
+
+Mirage has successfully completed all 10 planned phases:
+1. **Phase 1**: Modern C++20 CMake Foundation & Architecture.
+2. **Phase 2**: Image Ingestion, Scientific Color Conversion & Spatial Tiling.
+3. **Phase 3**: Scalar Reference Enhancement Engine (FP32).
+4. **Phase 4**: Fixed-Precision Computation (Emulated IEEE 754 FP16 & Mixed-Precision).
+5. **Phase 5**: Tile-Based Sensitivity Analyzer (Color Variation, Gradient, Texture, Frequency).
+6. **Phase 6**: Adaptive Precision Decision Engine (Sensitivity-Guided Precision Allocation).
+7. **Phase 7**: AVX2 SIMD Optimization & Register-Level Kernel Fusion.
+8. **Phase 8**: Hardware Performance Counter Profiling & Roofline Modeling.
+9. **Phase 9**: Research Experiments, Ablation Studies & Pareto Frontier Analysis.
+10. **Phase 10**: Mirage Dark Creative Studio Desktop GUI (PySide6).

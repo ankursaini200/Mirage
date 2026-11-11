@@ -4,6 +4,7 @@ bin/
 lib/
 out/
 output/
+third_party/
 .cache/
 sample_image.png
 

@@ -25,8 +25,19 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
 
 ## 3. Current Development Status
 
-- **Current Milestone**: Phase 9 — Research Experiments, Ablation Studies and Pareto Analysis (v0.9.0-alpha)
+- **Current Milestone**: Phase 10 — Mirage Dark Creative Studio Desktop Application (v0.10.0-alpha)
 - **Active Capabilities**:
+  - **Mirage Dark Creative Studio (PySide6 Desktop Application)**:
+    - Dedicated desktop application (`scripts/mirage_studio.py`) with `./mirage-studio` launcher.
+    - Dark Creative Studio theme palette (#13141f, #1a1c29, #1e2132, #2d3148, #8a4fff, #2f80ed, #27ae60).
+    - Typography policy with explicit verification of approved `CODE Bold` / `CODE Regular` and fallback to system fonts.
+    - Decoupled `QProcess` asynchronous execution communicating via structured CLI `--json` contract without UI freezing.
+    - Interactive before/after split viewer (`SplitImageViewer`) with draggable `< | >` slider, smooth zoom/pan, 1:1, and fit-to-screen.
+    - Custom vector donut chart widget (`DonutChartWidget`) displaying real-time FP32 / FP16 spatial tile allocations.
+    - Zero-fabrication hardware runtime bar chart (`PerformanceBarChart`) displaying un-interpolated measured execution times.
+    - Multimodal heatmap and precision map viewer (`HeatmapOverlayViewer`) with TURBO colormap and calibrated scale.
+    - Filmstrip carousel ribbon (`FilmstripCarousel`) with thumbnail previews for quick image selection.
+    - Integrated multi-view navigation: *Enhance Studio*, *Tile Sensitivity Inspector*, *Hardware Microbenchmarks*, *30-Seed Random Ablation*, and *Publication Figures Gallery*.
   - Modular C++20 CMake build infrastructure with preset configurations.
   - Decoupled `mirage_core` engine library and `mirage` command-line executable.
   - Safe, multi-tier CPU feature detection (x86_64 CPUID, OSXSAVE, and XCR0 verification for AVX2 and FMA without executing illegal instructions).
@@ -64,6 +75,25 @@ Mirage investigates this hypothesis systematically on CPU architectures with har
     - Curated 7-modality evaluation dataset and reproducible pipeline orchestrator (`benchmarks/run_experiments.sh`).
     - Publication-grade automated charting pipeline producing 6 high-resolution plots via Cairo.
   - Full automated unit test suite with 106 tests across 16 test suites and 14 CTest cases (100% pass rate).
+
+---
+
+## 4. Mirage Dark Creative Studio
+
+![Mirage Dark Creative Studio](docs/images/mirage_studio_screenshot.png)
+
+Mirage features a desktop research and imaging studio implemented in PySide6. The application is launched via the root launcher script or Python:
+
+```bash
+# Launch Mirage Creative Studio
+./mirage-studio
+
+# Or launch directly with an image
+./mirage-studio data/experiments/natural_scene.png
+
+# Run automated headless verification test
+python3 scripts/test_studio_headless.py
+```
 
 ## 4. Technology Stack
 

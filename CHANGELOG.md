@@ -5,6 +5,30 @@ All notable changes to **Mirage** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0-alpha] - 2026-11-10
+
+### Added
+- **Mirage Dark Creative Studio (Desktop GUI Application)**:
+  - Created desktop studio application in PySide6 (`scripts/mirage_studio.py`) with root launcher (`mirage-studio`).
+  - Dark Creative Studio theme palette (#13141f, #1a1c29, #1e2132, #2d3148, #8a4fff, #2f80ed, #27ae60).
+  - Explicit typography compliance policy: checks for approved `CODE Bold` / `CODE Regular` in `assets/fonts/` and system paths, issuing clear notices and falling back cleanly to system fonts without silent substitution.
+  - Asynchronous `QProcess` backend execution calling `./build/release/mirage` with structured `--json` communication contract, preventing GUI thread freezing.
+  - Interactive Before/After split image viewer (`SplitImageViewer`) featuring a draggable `< | >` divider, mouse-wheel centered zoom/pan, fit-to-screen, and non-overlapping corner status badges.
+  - Vector donut chart widget (`DonutChartWidget`) rendering live FP32 / FP16 spatial tile allocations with center tile count and percentage legend.
+  - Zero-fabrication hardware runtime comparison chart (`PerformanceBarChart`) displaying un-interpolated measured execution latencies for FP32, FP16 Emulated, and Adaptive precision.
+  - Multimodal overlay viewer (`HeatmapOverlayViewer`) supporting TURBO sensitivity heatmaps with vertical colorbar, tile precision map grid, difference map, and RGB histogram.
+  - Filmstrip carousel ribbon (`FilmstripCarousel`) with thumbnail previews for all dataset modalities.
+  - Comprehensive 5-view studio navigation:
+    1. *Enhance Studio*: Interactive split comparison and real-time adjustment sliders.
+    2. *Tile Sensitivity Inspector*: Tabular breakdown of per-tile coordinates, sensitivities, and precision assignments.
+    3. *Hardware Microbenchmarks*: Results viewer for microbenchmark measurements from CSV records.
+    4. *30-Seed Random Ablation*: Research evaluation viewer comparing guided vs. 30-seed randomized baseline.
+    5. *Publication Figures Gallery*: Cairo chart viewer for Phase 8 & 9 figures.
+  - Headless test and verification script (`scripts/test_studio_headless.py`) verifying GUI lifecycle, async QProcess execution, telemetry parsing, and screenshot capture.
+- **CLI Extensions (`src/main.cpp`)**:
+  - Added `--json` option to `--info` outputting structured JSON system metadata.
+  - Added `--json`, `--save-heatmap <path>`, and `--save-precision-map <path>` to `--enhance`, outputting comprehensive JSON telemetry and saving overlay images while strictly preserving legacy text output for non-JSON calls.
+
 ## [0.9.0-alpha] - 2026-11-10
 
 ### Added

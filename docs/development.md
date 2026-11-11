@@ -356,3 +356,30 @@ Generated research artifacts:
 - `benchmarks/plots/*.png` (6 Phase 9 publication plots)
 
 For full findings, statistical test results, and Pareto curves, consult [`docs/research-results.md`](research-results.md).
+
+## Mirage Dark Creative Studio (Phase 10)
+
+Mirage includes a desktop creative studio application implemented in PySide6 with dark theme ergonomics and interactive before/after split viewing.
+
+```bash
+# Launch the desktop creative studio using the root launcher:
+./mirage-studio
+
+# Or launch directly via Python:
+python3 scripts/mirage_studio.py [image_path]
+
+# Run automated headless verification test:
+python3 scripts/test_studio_headless.py
+```
+
+### CLI JSON Integration
+The studio interacts with `./build/release/mirage` via asynchronous `QProcess` invocations using structured JSON:
+```bash
+# General metadata in JSON:
+./build/release/mirage --info --json
+
+# Enhancement with full telemetry, heatmap, and precision map:
+./build/release/mirage --enhance input.png --output output.png \
+    --precision adaptive --tile-size 32 --sensitivity-threshold 0.04 \
+    --json --save-heatmap heatmap.png --save-precision-map pmap.png
+```

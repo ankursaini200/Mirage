@@ -1,10 +1,15 @@
+#include <chrono>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <opencv2/imgproc.hpp>
+
+#include "mirage/analysis/quality_metrics.hpp"
 #include "mirage/analysis/sensitivity_analyzer.hpp"
 #include "mirage/cpu/cpu_features.hpp"
 #include "mirage/enhancement/enhancement_engine.hpp"
@@ -16,6 +21,22 @@
 #include "mirage/version.hpp"
 
 namespace {
+
+std::string json_escape(std::string_view s) {
+    std::string res;
+    res.reserve(s.size());
+    for (char c : s) {
+        if (c == '"') res += "\\\"";
+        else if (c == '\\') res += "\\\\";
+        else if (c == '\b') res += "\\b";
+        else if (c == '\f') res += "\\f";
+        else if (c == '\n') res += "\\n";
+        else if (c == '\r') res += "\\r";
+        else if (c == '\t') res += "\\t";
+        else res += c;
+    }
+    return res;
+}
 
 void print_help(std::string_view program_name) {
     std::cout << "Usage: " << program_name << " [options]\n\n"
@@ -41,7 +62,10 @@ void print_help(std::string_view program_name) {
               << "    [--brightness <val>]              Additive brightness in [-1.0, 1.0] (default: 0.0)\n"
               << "    [--contrast <val>]                Contrast factor >= 0.0 (default: 1.0)\n"
               << "    [--saturation <val>]              Saturation factor >= 0.0 (default: 1.0)\n"
-              << "    [--gamma <val>]                   Gamma exponent > 0.0 (default: 1.0)\n\n"
+              << "    [--gamma <val>]                   Gamma exponent > 0.0 (default: 1.0)\n"
+              << "    [--json]                          Output structured telemetry and metrics in JSON format\n"
+              << "    [--save-heatmap <path>]           Save sensitivity heatmap (adaptive mode)\n"
+              << "    [--save-precision-map <path>]     Save tile precision map overlay (adaptive mode)\n\n"
               << "Sensitivity Analysis Options:\n"
               << "  --analyze-sensitivity <image_path> --tile-size <size>\n"
               << "                                      Analyze tile-based image sensitivity\n"
@@ -66,6 +90,23 @@ void print_info() {
               << "F16C availability:         " << (cpu.has_f16c ? "Supported" : "Unsupported") << "\n"
               << "FMA availability:          " << (cpu.has_fma ? "Supported" : "Unsupported") << "\n"
               << "Default execution backend: auto (resolves to " << mirage::simd::to_string(default_backend) << ")\n";
+}
+
+void print_info_json() {
+    const auto& cpu = mirage::cpu::CpuFeatures::detect();
+    const auto default_backend = mirage::simd::resolve_backend(mirage::simd::ExecutionBackend::Auto);
+
+    std::cout << "{\n"
+              << "  \"project_name\": \"" << json_escape(mirage::PROJECT_NAME) << "\",\n"
+              << "  \"project_version\": \"" << json_escape(mirage::get_version_string()) << "\",\n"
+              << "  \"cpp_standard\": \"" << json_escape(mirage::get_cpp_standard_string()) << "\",\n"
+              << "  \"compiler_information\": \"" << json_escape(mirage::get_compiler_info_string()) << "\",\n"
+              << "  \"cpu_architecture\": \"" << json_escape(cpu.architecture_name()) << "\",\n"
+              << "  \"avx2\": " << (cpu.has_avx2 ? "true" : "false") << ",\n"
+              << "  \"fma\": " << (cpu.has_fma ? "true" : "false") << ",\n"
+              << "  \"f16c\": " << (cpu.has_f16c ? "true" : "false") << ",\n"
+              << "  \"default_backend\": \"" << mirage::simd::to_string(default_backend) << "\"\n"
+              << "}\n";
 }
 
 int handle_image_info(const std::filesystem::path& image_path) {
@@ -237,19 +278,100 @@ int handle_enhance(const std::filesystem::path& input_path,
                    const mirage::enhancement::EnhancementConfig& config,
                    mirage::enhancement::PrecisionMode mode,
                    const mirage::enhancement::MixedPrecisionPolicy& policy,
-                   mirage::simd::ExecutionBackend backend) {
+                   mirage::simd::ExecutionBackend backend,
+                   int tile_size = 32,
+                   bool json_mode = false) {
     try {
         config.validate();
 
         const cv::Mat u8_in = mirage::image::ImageLoader::load(input_path);
         const cv::Mat f32_in = mirage::image::ImageLoader::normalize_to_float32(u8_in);
 
-        // Compute output using selected precision mode and backend
+        const auto start_time = std::chrono::high_resolution_clock::now();
         const cv::Mat f32_out = mirage::enhancement::EnhancementEngine::process_with_precision(
             f32_in, config, mode, policy, backend);
-        const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(f32_out);
+        const auto end_time = std::chrono::high_resolution_clock::now();
+        const double runtime_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 
+        const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(f32_out);
         mirage::image::ImageLoader::save(output_path, u8_out);
+
+        if (json_mode) {
+            const int ts = tile_size > 0 ? tile_size : 32;
+            const mirage::image::TileManager tm(u8_in, ts, ts);
+            const size_t total_tiles = tm.total_tiles();
+            const size_t fp32_cnt = (mode == mirage::enhancement::PrecisionMode::FP32) ? total_tiles : 0;
+            const size_t fp16_cnt = (mode == mirage::enhancement::PrecisionMode::FP16) ? total_tiles : 0;
+            const double fp32_pct = (mode == mirage::enhancement::PrecisionMode::FP32) ? 100.0 : 0.0;
+            const double fp16_pct = (mode == mirage::enhancement::PrecisionMode::FP16) ? 100.0 : 0.0;
+            const auto& cpu = mirage::cpu::CpuFeatures::detect();
+
+            std::cout << "{\n"
+                      << "  \"status\": \"success\",\n"
+                      << "  \"command\": \"enhance\",\n"
+                      << "  \"image\": {\n"
+                      << "    \"input_path\": \"" << json_escape(input_path.string()) << "\",\n"
+                      << "    \"output_path\": \"" << json_escape(output_path.string()) << "\",\n"
+                      << "    \"heatmap_path\": \"\",\n"
+                      << "    \"precision_map_path\": \"\",\n"
+                      << "    \"width\": " << u8_in.cols << ",\n"
+                      << "    \"height\": " << u8_in.rows << ",\n"
+                      << "    \"channels\": " << u8_in.channels() << ",\n"
+                      << "    \"format\": \"CV_32FC3 normalized BGR (from CV_8UC3)\"\n"
+                      << "  },\n"
+                      << "  \"config\": {\n"
+                      << "    \"precision_mode\": \"" << mirage::enhancement::to_string(mode) << "\",\n"
+                      << "    \"policy\": \"" << (mode == mirage::enhancement::PrecisionMode::Mixed ? "operation-level" : "uniform") << "\",\n"
+                      << "    \"backend\": \"" << mirage::simd::to_string(backend) << "\",\n"
+                      << "    \"resolved_backend\": \"" << mirage::simd::to_string(mirage::simd::resolve_backend(backend)) << "\",\n"
+                      << "    \"tile_width\": " << ts << ",\n"
+                      << "    \"tile_height\": " << ts << ",\n"
+                      << "    \"threshold\": null,\n"
+                      << "    \"brightness\": " << std::fixed << std::setprecision(4) << config.brightness << ",\n"
+                      << "    \"contrast\": " << config.contrast << ",\n"
+                      << "    \"saturation\": " << config.saturation << ",\n"
+                      << "    \"gamma\": " << config.gamma << "\n"
+                      << "  },\n"
+                      << "  \"runtime\": {\n"
+                      << "    \"is_measured\": true,\n"
+                      << "    \"measured_pipeline_ms\": " << std::fixed << std::setprecision(4) << runtime_ms << "\n"
+                      << "  },\n"
+                      << "  \"tile_allocation\": {\n"
+                      << "    \"total_tiles\": " << total_tiles << ",\n"
+                      << "    \"fp32_count\": " << fp32_cnt << ",\n"
+                      << "    \"fp16_count\": " << fp16_cnt << ",\n"
+                      << "    \"fp32_percentage\": " << std::fixed << std::setprecision(2) << fp32_pct << ",\n"
+                      << "    \"fp16_percentage\": " << std::fixed << std::setprecision(2) << fp16_pct << ",\n"
+                      << "    \"theoretical_bandwidth_reduction_pct\": " << (fp16_pct * 0.5) << "\n"
+                      << "  },\n";
+
+            if (mode == mirage::enhancement::PrecisionMode::FP32) {
+                std::cout << "  \"quality_metrics_vs_fp32_reference\": null,\n";
+            } else {
+                const cv::Mat f32_ref = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+                const auto qm = mirage::analysis::evaluate_quality(f32_ref, f32_out);
+                std::cout << "  \"quality_metrics_vs_fp32_reference\": {\n"
+                          << "    \"reference_description\": \"FP32 Scalar Enhancement Output (Ground Truth)\",\n"
+                          << "    \"psnr_db\": " << std::fixed << std::setprecision(2) << qm.peak_signal_to_noise_ratio << ",\n"
+                          << "    \"ssim\": " << std::setprecision(4) << qm.ssim << ",\n"
+                          << "    \"mean_ciede2000\": " << std::setprecision(4) << qm.mean_ciede2000 << ",\n"
+                          << "    \"max_ciede2000\": " << std::setprecision(4) << qm.max_ciede2000 << ",\n"
+                          << "    \"mean_absolute_error\": " << std::setprecision(6) << qm.mean_absolute_error << ",\n"
+                          << "    \"root_mean_square_error\": " << std::setprecision(6) << qm.root_mean_square_error << ",\n"
+                          << "    \"max_absolute_error\": " << std::setprecision(6) << qm.max_absolute_error << ",\n"
+                          << "    \"relative_l2_error\": " << std::setprecision(6) << qm.relative_l2_error << "\n"
+                          << "  },\n";
+            }
+
+            std::cout << "  \"hardware\": {\n"
+                      << "    \"cpu_architecture\": \"" << json_escape(cpu.architecture_name()) << "\",\n"
+                      << "    \"has_avx2\": " << (cpu.has_avx2 ? "true" : "false") << ",\n"
+                      << "    \"has_fma\": " << (cpu.has_fma ? "true" : "false") << ",\n"
+                      << "    \"has_f16c\": " << (cpu.has_f16c ? "true" : "false") << "\n"
+                      << "  }\n"
+                      << "}\n";
+            return 0;
+        }
 
         std::string mode_desc;
         if (mode == mirage::enhancement::PrecisionMode::FP32) {
@@ -297,7 +419,10 @@ int handle_enhance_adaptive(const std::filesystem::path& input_path,
                             const mirage::enhancement::EnhancementConfig& config,
                             int tile_size,
                             double threshold,
-                            mirage::simd::ExecutionBackend backend) {
+                            mirage::simd::ExecutionBackend backend,
+                            bool json_mode = false,
+                            const std::filesystem::path& heatmap_path = "",
+                            const std::filesystem::path& precision_map_path = "") {
     try {
         config.validate();
 
@@ -312,8 +437,111 @@ int handle_enhance_adaptive(const std::filesystem::path& input_path,
         const cv::Mat u8_out = mirage::image::ImageLoader::denormalize_to_uint8(result.enhanced_image);
         mirage::image::ImageLoader::save(output_path, u8_out);
 
+        // Save heatmap if requested
+        if (!heatmap_path.empty()) {
+            mirage::analysis::SensitivityAnalyzer analyzer{};
+            analyzer.save_heatmap(heatmap_path, u8_in, result.sensitivity_report);
+        }
+
+        // Save precision map if requested
+        if (!precision_map_path.empty()) {
+            cv::Mat pmap(u8_in.size(), CV_8UC3, cv::Scalar(19, 20, 31));
+            for (const auto& assign : result.decision.assignments) {
+                const cv::Scalar col = (assign.precision == mirage::enhancement::PrecisionMode::FP32)
+                    ? cv::Scalar(237, 128, 47)   // Blue (#2f80ed in BGR)
+                    : cv::Scalar(96, 174, 39);   // Green (#27ae60 in BGR)
+                const cv::Rect r(assign.x, assign.y, assign.width, assign.height);
+                cv::rectangle(pmap, r, col, cv::FILLED);
+                cv::rectangle(pmap, r, cv::Scalar(72, 49, 45), 1);
+            }
+            cv::Mat blended;
+            cv::addWeighted(u8_in, 0.45, pmap, 0.55, 0.0, blended);
+            mirage::image::ImageLoader::save(precision_map_path, blended);
+        }
+
         // Generate full FP32 reference OUTSIDE the timed section
         const cv::Mat f32_ref = mirage::enhancement::EnhancementEngine::process(f32_in, config);
+        const auto qm = mirage::analysis::evaluate_quality(f32_ref, result.enhanced_image);
+
+        if (json_mode) {
+            const auto& cpu = mirage::cpu::CpuFeatures::detect();
+            std::cout << "{\n"
+                      << "  \"status\": \"success\",\n"
+                      << "  \"command\": \"enhance\",\n"
+                      << "  \"image\": {\n"
+                      << "    \"input_path\": \"" << json_escape(input_path.string()) << "\",\n"
+                      << "    \"output_path\": \"" << json_escape(output_path.string()) << "\",\n"
+                      << "    \"heatmap_path\": \"" << json_escape(heatmap_path.string()) << "\",\n"
+                      << "    \"precision_map_path\": \"" << json_escape(precision_map_path.string()) << "\",\n"
+                      << "    \"width\": " << u8_in.cols << ",\n"
+                      << "    \"height\": " << u8_in.rows << ",\n"
+                      << "    \"channels\": " << u8_in.channels() << ",\n"
+                      << "    \"format\": \"CV_32FC3 normalized BGR (from CV_8UC3)\"\n"
+                      << "  },\n"
+                      << "  \"config\": {\n"
+                      << "    \"precision_mode\": \"adaptive\",\n"
+                      << "    \"policy\": \"sensitivity-guided\",\n"
+                      << "    \"backend\": \"" << mirage::simd::to_string(backend) << "\",\n"
+                      << "    \"resolved_backend\": \"" << mirage::simd::to_string(mirage::simd::resolve_backend(backend)) << "\",\n"
+                      << "    \"tile_width\": " << tile_size << ",\n"
+                      << "    \"tile_height\": " << tile_size << ",\n"
+                      << "    \"threshold\": " << std::fixed << std::setprecision(4) << threshold << ",\n"
+                      << "    \"brightness\": " << config.brightness << ",\n"
+                      << "    \"contrast\": " << config.contrast << ",\n"
+                      << "    \"saturation\": " << config.saturation << ",\n"
+                      << "    \"gamma\": " << config.gamma << "\n"
+                      << "  },\n"
+                      << "  \"runtime\": {\n"
+                      << "    \"is_measured\": true,\n"
+                      << "    \"measured_pipeline_ms\": " << std::fixed << std::setprecision(4) << result.adaptive_execution_time_ms << ",\n"
+                      << "    \"adaptive_stage_ms\": " << result.adaptive_execution_time_ms << ",\n"
+                      << "    \"sensitivity_stage_ms\": " << result.sensitivity_report.execution_time_ms << "\n"
+                      << "  },\n"
+                      << "  \"tile_allocation\": {\n"
+                      << "    \"total_tiles\": " << result.decision.total_tiles << ",\n"
+                      << "    \"fp32_count\": " << result.decision.fp32_count << ",\n"
+                      << "    \"fp16_count\": " << result.decision.fp16_count << ",\n"
+                      << "    \"fp32_percentage\": " << std::fixed << std::setprecision(2) << result.decision.fp32_percentage << ",\n"
+                      << "    \"fp16_percentage\": " << std::fixed << std::setprecision(2) << result.decision.fp16_percentage << ",\n"
+                      << "    \"theoretical_bandwidth_reduction_pct\": " << (result.decision.fp16_percentage * 0.5) << ",\n"
+                      << "    \"assignments\": [\n";
+
+            for (size_t i = 0; i < result.decision.assignments.size(); ++i) {
+                const auto& a = result.decision.assignments[i];
+                std::cout << "      {\"id\": " << a.tile_id
+                          << ", \"x\": " << a.x
+                          << ", \"y\": " << a.y
+                          << ", \"width\": " << a.width
+                          << ", \"height\": " << a.height
+                          << ", \"is_partial\": " << (a.is_partial ? "true" : "false")
+                          << ", \"precision\": \"" << (a.precision == mirage::enhancement::PrecisionMode::FP32 ? "FP32" : "FP16") << "\""
+                          << ", \"sensitivity_score\": " << std::fixed << std::setprecision(6) << a.sensitivity_score << "}"
+                          << (i + 1 < result.decision.assignments.size() ? ",\n" : "\n");
+            }
+
+            std::cout << "    ]\n"
+                      << "  },\n"
+                      << "  \"quality_metrics_vs_fp32_reference\": {\n"
+                      << "    \"reference_description\": \"FP32 Scalar Enhancement Output (Ground Truth)\",\n"
+                      << "    \"psnr_db\": " << std::fixed << std::setprecision(2) << qm.peak_signal_to_noise_ratio << ",\n"
+                      << "    \"ssim\": " << std::setprecision(4) << qm.ssim << ",\n"
+                      << "    \"mean_ciede2000\": " << std::setprecision(4) << qm.mean_ciede2000 << ",\n"
+                      << "    \"max_ciede2000\": " << std::setprecision(4) << qm.max_ciede2000 << ",\n"
+                      << "    \"mean_absolute_error\": " << std::setprecision(6) << qm.mean_absolute_error << ",\n"
+                      << "    \"root_mean_square_error\": " << std::setprecision(6) << qm.root_mean_square_error << ",\n"
+                      << "    \"max_absolute_error\": " << std::setprecision(6) << qm.max_absolute_error << ",\n"
+                      << "    \"relative_l2_error\": " << std::setprecision(6) << qm.relative_l2_error << "\n"
+                      << "  },\n"
+                      << "  \"hardware\": {\n"
+                      << "    \"cpu_architecture\": \"" << json_escape(cpu.architecture_name()) << "\",\n"
+                      << "    \"has_avx2\": " << (cpu.has_avx2 ? "true" : "false") << ",\n"
+                      << "    \"has_fma\": " << (cpu.has_fma ? "true" : "false") << ",\n"
+                      << "    \"has_f16c\": " << (cpu.has_f16c ? "true" : "false") << "\n"
+                      << "  }\n"
+                      << "}\n";
+            return 0;
+        }
+
         const mirage::enhancement::ErrorMetrics metrics =
             mirage::enhancement::compute_error_metrics(f32_ref, result.enhanced_image);
 
@@ -363,7 +591,15 @@ int main(int argc, char* argv[]) {
     }
 
     if (args[0] == "--info" || args[0] == "-i") {
-        print_info();
+        bool json = false;
+        for (const auto& a : args) {
+            if (a == "--json") json = true;
+        }
+        if (json) {
+            print_info_json();
+        } else {
+            print_info();
+        }
         return 0;
     }
 
@@ -462,6 +698,9 @@ int main(int argc, char* argv[]) {
     if (args[0] == "--enhance") {
         std::filesystem::path input_path;
         std::filesystem::path output_path;
+        std::filesystem::path heatmap_path;
+        std::filesystem::path precision_map_path;
+        bool json_mode = false;
         mirage::enhancement::EnhancementConfig config{};
         mirage::enhancement::PrecisionMode precision_mode = mirage::enhancement::PrecisionMode::FP32;
         mirage::simd::ExecutionBackend backend = mirage::simd::ExecutionBackend::Auto;
@@ -473,6 +712,16 @@ int main(int argc, char* argv[]) {
             if (args[i] == "--output" || args[i] == "-o") {
                 if (i + 1 < args.size()) {
                     output_path = args[++i];
+                }
+            } else if (args[i] == "--json") {
+                json_mode = true;
+            } else if (args[i] == "--save-heatmap") {
+                if (i + 1 < args.size()) {
+                    heatmap_path = args[++i];
+                }
+            } else if (args[i] == "--save-precision-map") {
+                if (i + 1 < args.size()) {
+                    precision_map_path = args[++i];
                 }
             } else if (args[i] == "--precision") {
                 if (i + 1 < args.size()) {
@@ -576,10 +825,10 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error: Sensitivity threshold must be in [0.0, 1.0].\n";
                 return 1;
             }
-            return handle_enhance_adaptive(input_path, output_path, config, tile_size, sensitivity_threshold, backend);
+            return handle_enhance_adaptive(input_path, output_path, config, tile_size, sensitivity_threshold, backend, json_mode, heatmap_path, precision_map_path);
         }
 
-        return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy, backend);
+        return handle_enhance(input_path, output_path, config, precision_mode, mixed_policy, backend, tile_size, json_mode);
     }
 
     std::cerr << "Error: Unrecognized option '" << args[0] << "'\n\n";

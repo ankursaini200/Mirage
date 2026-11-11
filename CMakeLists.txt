@@ -18,10 +18,8 @@ endif()
 # Export compile commands for tooling (clangd, clang-tidy, etc.)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Configure search paths and RPATH for dependencies
-list(APPEND CMAKE_PREFIX_PATH "/tmp/opencv_install/usr" "/usr/local" "/opt/opencv")
-set(CMAKE_BUILD_RPATH "/tmp/opencv_install/usr/lib")
-set(CMAKE_INSTALL_RPATH "/tmp/opencv_install/usr/lib")
+# Configure search paths and portable RPATH for dependencies
+set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # User-configurable options
@@ -54,9 +52,28 @@ else()
     )
 endif()
 
-# Find OpenCV
+# Find OpenCV (prefer system or user-specified paths; fall back to project-local bundle)
 if(MIRAGE_ENABLE_OPENCV)
-    find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+    find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+    if(NOT OpenCV_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencv/usr/lib")
+        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencv/usr")
+        find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+        file(RELATIVE_PATH _mirage_rel_opencv_root "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencv/usr/lib")
+        file(RELATIVE_PATH _mirage_rel_opencv_sub  "${CMAKE_BINARY_DIR}/tests" "${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencv/usr/lib")
+        set(CMAKE_BUILD_WITH_INSTALL_RPATH ON)
+        set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+        set(CMAKE_INSTALL_RPATH
+            "$ORIGIN/${_mirage_rel_opencv_root}"
+            "$ORIGIN/${_mirage_rel_opencv_sub}"
+            "$ORIGIN/../lib"
+        )
+        # Ensure transitive OpenCV shared libraries resolve inside the project-local bundle
+        if(NOT MSVC)
+            add_link_options("-Wl,--disable-new-dtags")
+        endif()
+    elseif(NOT OpenCV_FOUND)
+        find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+    endif()
     message(STATUS "OpenCV ${OpenCV_VERSION} found at ${OpenCV_DIR}")
 endif()
 
