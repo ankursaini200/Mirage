@@ -66,7 +66,7 @@ To establish whether the sensitivity metric actually provides intelligent alloca
 
 ### 3.1 Hypothesis H1: Sensitivity-Guided vs. Random Allocation
 
-![Random vs Guided Comparison](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/random_vs_guided.png)
+![Random vs Guided Comparison](../benchmarks/plots/random_vs_guided.png)
 
 #### Overall Statistics across all Configurations
 - **Guided Mean MAE**: $0.0001095$
@@ -96,7 +96,7 @@ When inspecting modalities with heterogeneous spatial characteristics where the 
 
 ### 3.2 Hypothesis H4: Sensitivity Feature Ablations
 
-![Feature Ablation Study](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/feature_ablation.png)
+![Feature Ablation Study](../benchmarks/plots/feature_ablation.png)
 
 We evaluated 9 distinct feature configurations:
 - **Baseline**: `all_features` ($w_c=0.25, w_g=0.25, w_e=0.25, w_l=0.25$)
@@ -123,7 +123,7 @@ We evaluated 9 distinct feature configurations:
 
 ### 3.3 Tile-by-Tile Sensitivity Validation (Score vs. Error)
 
-![Sensitivity vs Error Scatter](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/sensitivity_vs_error.png)
+![Sensitivity vs Error Scatter](../benchmarks/plots/sensitivity_vs_error.png)
 
 Evaluating $N = 1,792$ individual image tiles across all modalities to correlate the calculated sensitivity score $S_i$ directly with the ground-truth FP16 error $E_i$:
 
@@ -150,7 +150,7 @@ Grouping tiles into four quartiles based on their sensitivity score $S$:
 
 ### 3.4 Hypothesis H3: Architectural Tile Size Trade-Offs
 
-![Tile Size Comparison](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/tile_size_comparison.png)
+![Tile Size Comparison](../benchmarks/plots/tile_size_comparison.png)
 
 Sweep across nominal tile sizes $8\times 8$, $16\times 16$, $32\times 32$, and $64\times 64$:
 
@@ -171,9 +171,9 @@ Sweep across nominal tile sizes $8\times 8$, $16\times 16$, $32\times 32$, and $
 ### 3.5 Pareto Frontiers (Quality vs. Execution Cost)
 
 ````carousel
-![Pareto Error vs Runtime](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/pareto_error_runtime.png)
+![Pareto Error vs Runtime](../benchmarks/plots/pareto_error_runtime.png)
 <!-- slide -->
-![Pareto DeltaE vs Runtime](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/plots/pareto_deltae_runtime.png)
+![Pareto DeltaE vs Runtime](../benchmarks/plots/pareto_deltae_runtime.png)
 ````
 
 #### Pareto Non-Dominated Operating Points

@@ -606,6 +606,15 @@ def create_studio_icon(kind: str, color: str = TEXT_SECONDARY, size: int = 16) -
     elif kind == "win_close":
         p.drawLine(QPointF(s * 0.28, s * 0.28), QPointF(s * 0.72, s * 0.72))
         p.drawLine(QPointF(s * 0.72, s * 0.28), QPointF(s * 0.28, s * 0.72))
+    elif kind == "play":
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(color))
+        tri = QPolygonF([
+            QPointF(s * 0.30, s * 0.22),
+            QPointF(s * 0.78, s * 0.50),
+            QPointF(s * 0.30, s * 0.78),
+        ])
+        p.drawPolygon(tri)
 
     p.end()
     return QIcon(pix)
@@ -731,12 +740,18 @@ QFrame.panelCard {{
     padding: 8px;
 }}
 
-QFrame.subCard,
-QFrame.leftCard {{
+QFrame.subCard {{
     background-color: {BG_SUBCARD};
     border: 1px solid {BORDER_COLOR};
     border-radius: 6px;
     padding: 6px;
+}}
+
+QFrame.leftCard {{
+    background-color: {BG_SUBCARD};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 6px;
+    padding: 0px;
 }}
 
 /* Left Adjustment Panel (#121820 main panel, #19212A section cards, #202A34 controls) */
@@ -750,8 +765,9 @@ QFrame#leftAdjustmentPanel QPushButton {{
     background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
-    border-radius: 5px;
-    padding: 4px 9px;
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-height: 16px;
     text-align: left;
     font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 10px;
@@ -760,7 +776,7 @@ QFrame#leftAdjustmentPanel QPushButton {{
 
 QFrame#leftAdjustmentPanel QPushButton:hover {{
     background-color: {BG_HOVER};
-    border: 1px solid {ACCENT_BLUE};
+    border: 1px solid {SLIDER_ACTIVE};
 }}
 
 QFrame#leftAdjustmentPanel QPushButton:pressed {{
@@ -771,14 +787,14 @@ QFrame#leftAdjustmentPanel QComboBox {{
     background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
-    border-radius: 5px;
-    padding: 3px 8px;
+    border-radius: 6px;
+    padding: 3px 9px;
     font-size: 10px;
-    min-height: 18px;
+    min-height: 16px;
 }}
 
 QFrame#leftAdjustmentPanel QComboBox:hover {{
-    border: 1px solid {ACCENT_BLUE};
+    border: 1px solid {SLIDER_ACTIVE};
 }}
 
 QFrame#leftAdjustmentPanel QLabel.subHeader {{
@@ -798,7 +814,7 @@ QToolButton.stepBtn {{
 
 QToolButton.stepBtn:hover {{
     background-color: {BG_HOVER};
-    border: 1px solid {ACCENT_BLUE};
+    border: 1px solid {SLIDER_ACTIVE};
     color: #ffffff;
 }}
 
@@ -842,23 +858,23 @@ QLabel.subHeader {{
 
 /* Darker Graphite Sliders (#303B46 track, #527D9B active fill, #C4D0D9 handle) */
 QSlider::groove:horizontal {{
-    height: 4px;
+    height: 6px;
     background-color: {SLIDER_INACTIVE};
-    border-radius: 2px;
+    border-radius: 3px;
 }}
 
 QSlider::sub-page:horizontal {{
     background-color: {SLIDER_ACTIVE};
-    border-radius: 2px;
+    border-radius: 3px;
 }}
 
 QSlider::handle:horizontal {{
     background-color: {SLIDER_HANDLE};
     border: 1.5px solid {SLIDER_ACTIVE};
-    width: 11px;
-    height: 11px;
+    width: 14px;
+    height: 14px;
     margin: -4px 0;
-    border-radius: 6px;
+    border-radius: 7px;
 }}
 
 QSlider::handle:horizontal:hover {{
@@ -971,11 +987,12 @@ QPushButton.subTab:checked {{
 
 QFrame#leftAdjustmentPanel QPushButton#btnPrimary,
 QPushButton#btnPrimary {{
-    background-color: {ACCENT_BLUE};
+    background-color: {SLIDER_ACTIVE};
     color: #ffffff;
     border: 1px solid {ACCENT_BLUE_LIGHT};
     border-radius: 6px;
-    padding: 8px 14px;
+    padding: 9px 14px;
+    min-height: 20px;
     text-align: center;
     font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 12px;
@@ -1006,11 +1023,11 @@ QLabel.valBadge {{
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
     border-radius: 4px;
-    padding: 1px 6px;
+    padding: 1px 4px;
     font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 9px;
     font-weight: 700;
-    min-width: 44px;
+    min-width: 38px;
     qproperty-alignment: AlignCenter;
 }}
 
@@ -2271,10 +2288,11 @@ class MirageStudioMainWindow(QMainWindow):
         self._init_ui()
         self._load_system_info()
 
-        # Load initial image
+        # Load initial image & synchronize Run Enhancement availability
         if self._active_image_path and os.path.exists(self._active_image_path):
             self._filmstrip.select_image(self._active_image_path)
             self._on_image_selected(self._active_image_path)
+        self._update_run_button_state()
 
     def _init_ui(self) -> None:
         central_widget = QWidget(self)
@@ -2456,8 +2474,8 @@ class MirageStudioMainWindow(QMainWindow):
     def _create_left_sidebar(self) -> QWidget:
         panel = QFrame(self)
         panel.setObjectName("leftAdjustmentPanel")
-        panel.setMinimumWidth(262)
-        panel.setMaximumWidth(298)
+        panel.setMinimumWidth(288)
+        panel.setMaximumWidth(312)
         panel.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
 
         outer_layout = QVBoxLayout(panel)
@@ -2467,93 +2485,116 @@ class MirageStudioMainWindow(QMainWindow):
         scroll = QScrollArea(panel)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         inner = QWidget(scroll)
         inner.setObjectName("transparentInner")
         inner.setMinimumWidth(0)
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(0, 0, 2, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
 
         self._param_controls: Dict[str, Dict] = {}
 
-        # PROJECT Card (#19212A)
+        # -------------------------------------------------------------------
+        # Section 1: PROJECT (~18% target vertical allocation)
+        # -------------------------------------------------------------------
         card_proj = QFrame(inner)
+        card_proj.setObjectName("sidebarCardProject")
         card_proj.setProperty("class", "leftCard")
+        card_proj.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         proj_layout = QVBoxLayout(card_proj)
-        proj_layout.setContentsMargins(8, 7, 8, 7)
-        proj_layout.setSpacing(5)
+        proj_layout.setContentsMargins(9, 6, 9, 6)
+        proj_layout.setSpacing(4)
 
         lbl_proj = QLabel("PROJECT", card_proj)
         lbl_proj.setProperty("class", "sectionHeader")
+        lbl_proj.setFont(studio_font(lbl_proj, point_size=9, bold=True))
         proj_layout.addWidget(lbl_proj)
+        proj_layout.addStretch(1)
 
-        btn_open_img = QPushButton("  Open Image...", card_proj)
-        btn_open_img.setIcon(create_studio_icon("open", TEXT_PRIMARY, 13))
-        btn_open_img.setIconSize(QSize(13, 13))
-        btn_open_img.clicked.connect(self._on_open_image_dialog)
-        proj_layout.addWidget(btn_open_img)
+        for label, icon_name, cb in [
+            ("  Open Image...", "open", self._on_open_image_dialog),
+            ("  Save Result...", "save", self._on_save_result_dialog),
+            ("  Export Report...", "export", self._on_export_report_dialog),
+        ]:
+            btn = QPushButton(label, card_proj)
+            btn.setIcon(create_studio_icon(icon_name, TEXT_PRIMARY, 13))
+            btn.setIconSize(QSize(13, 13))
+            btn.setMinimumHeight(24)
+            btn.setMaximumHeight(34)
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+            btn.clicked.connect(cb)
+            proj_layout.addWidget(btn)
+            proj_layout.addStretch(1)
 
-        btn_save_res = QPushButton("  Save Result...", card_proj)
-        btn_save_res.setIcon(create_studio_icon("save", TEXT_PRIMARY, 13))
-        btn_save_res.setIconSize(QSize(13, 13))
-        btn_save_res.clicked.connect(self._on_save_result_dialog)
-        proj_layout.addWidget(btn_save_res)
+        layout.addWidget(card_proj, 18)
 
-        btn_export_rep = QPushButton("  Export Report...", card_proj)
-        btn_export_rep.setIcon(create_studio_icon("export", TEXT_PRIMARY, 13))
-        btn_export_rep.setIconSize(QSize(13, 13))
-        btn_export_rep.clicked.connect(self._on_export_report_dialog)
-        proj_layout.addWidget(btn_export_rep)
-
-        layout.addWidget(card_proj)
-
-        # ENHANCEMENT Card (#19212A)
+        # -------------------------------------------------------------------
+        # Section 2: ENHANCEMENT (~42% target vertical allocation)
+        # -------------------------------------------------------------------
         card_enh = QFrame(inner)
+        card_enh.setObjectName("sidebarCardEnhancement")
         card_enh.setProperty("class", "leftCard")
+        card_enh.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         enh_layout = QVBoxLayout(card_enh)
-        enh_layout.setContentsMargins(8, 7, 8, 8)
-        enh_layout.setSpacing(7)
+        enh_layout.setContentsMargins(9, 6, 9, 6)
+        enh_layout.setSpacing(4)
 
         lbl_enh = QLabel("ENHANCEMENT", card_enh)
         lbl_enh.setProperty("class", "sectionHeader")
+        lbl_enh.setFont(studio_font(lbl_enh, point_size=9, bold=True))
         enh_layout.addWidget(lbl_enh)
+        enh_layout.addStretch(1)
 
         self._slider_bright, self._lbl_bright = self._create_slider_row(
             "Brightness", -1.00, 1.00, 0.10, scale=100, step=0.05, digits=2, signed=True, parent_layout=enh_layout, param_key="brightness"
         )
+        enh_layout.addStretch(2)
         self._slider_contrast, self._lbl_contrast = self._create_slider_row(
             "Contrast", 0.00, 3.00, 1.20, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="contrast"
         )
+        enh_layout.addStretch(2)
         self._slider_sat, self._lbl_sat = self._create_slider_row(
             "Saturation", 0.00, 3.00, 1.30, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="saturation"
         )
+        enh_layout.addStretch(2)
         self._slider_gamma, self._lbl_gamma = self._create_slider_row(
             "Gamma", 0.10, 3.00, 1.10, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="gamma"
         )
+        enh_layout.addStretch(1)
 
-        layout.addWidget(card_enh)
+        layout.addWidget(card_enh, 42)
 
-        # PRECISION Card (#19212A)
+        # -------------------------------------------------------------------
+        # Section 3: PRECISION (~30% target vertical allocation)
+        # -------------------------------------------------------------------
         card_prec = QFrame(inner)
+        card_prec.setObjectName("sidebarCardPrecision")
         card_prec.setProperty("class", "leftCard")
+        card_prec.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         prec_layout = QVBoxLayout(card_prec)
-        prec_layout.setContentsMargins(8, 7, 8, 8)
-        prec_layout.setSpacing(6)
+        prec_layout.setContentsMargins(9, 6, 9, 6)
+        prec_layout.setSpacing(4)
 
         lbl_prec = QLabel("PRECISION", card_prec)
         lbl_prec.setProperty("class", "sectionHeader")
+        lbl_prec.setFont(studio_font(lbl_prec, point_size=9, bold=True))
         prec_layout.addWidget(lbl_prec)
+        prec_layout.addStretch(1)
 
         prec_grid = QGridLayout()
         prec_grid.setContentsMargins(0, 0, 0, 0)
         prec_grid.setHorizontalSpacing(8)
-        prec_grid.setVerticalSpacing(5)
+        prec_grid.setVerticalSpacing(4)
+        prec_grid.setColumnMinimumWidth(0, 62)
 
         lbl_m = QLabel("Mode", card_prec)
         lbl_m.setProperty("class", "subHeader")
+        lbl_m.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._combo_mode = QComboBox(card_prec)
         self._combo_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._combo_mode.setMinimumContentsLength(10)
+        self._combo_mode.setMinimumHeight(23)
         self._combo_mode.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self._combo_mode.addItems(["Adaptive", "FP32 (Reference)", "FP16 (Emulated)", "Mixed Precision"])
         self._combo_mode.currentIndexChanged.connect(self._on_precision_mode_changed)
@@ -2562,9 +2603,11 @@ class MirageStudioMainWindow(QMainWindow):
 
         lbl_p = QLabel("Policy", card_prec)
         lbl_p.setProperty("class", "subHeader")
+        lbl_p.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._combo_policy = QComboBox(card_prec)
         self._combo_policy.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._combo_policy.setMinimumContentsLength(10)
+        self._combo_policy.setMinimumHeight(23)
         self._combo_policy.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self._combo_policy.addItems(["Sensitivity-Guided", "30-Seed Random (Research Ablation)"])
         self._combo_policy.currentIndexChanged.connect(self._on_policy_changed)
@@ -2573,9 +2616,11 @@ class MirageStudioMainWindow(QMainWindow):
 
         lbl_ts = QLabel("Tile Size", card_prec)
         lbl_ts.setProperty("class", "subHeader")
+        lbl_ts.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._combo_tilesize = QComboBox(card_prec)
         self._combo_tilesize.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self._combo_tilesize.setMinimumContentsLength(8)
+        self._combo_tilesize.setMinimumHeight(23)
         self._combo_tilesize.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self._combo_tilesize.addItems(["16 × 16", "32 × 32", "64 × 64", "128 × 128"])
         self._combo_tilesize.setCurrentIndex(1)
@@ -2584,20 +2629,38 @@ class MirageStudioMainWindow(QMainWindow):
 
         prec_grid.setColumnStretch(1, 1)
         prec_layout.addLayout(prec_grid)
+        prec_layout.addStretch(2)
+
+        sep = QFrame(card_prec)
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background-color: {BORDER_COLOR}; border: none;")
+        prec_layout.addWidget(sep)
+        prec_layout.addStretch(1)
 
         self._slider_tau, self._lbl_tau = self._create_slider_row(
-            "Threshold (τ)", 0.00, 1.00, 0.040, scale=1000, step=0.01, digits=3, signed=False, parent_layout=prec_layout, param_key="threshold"
+            "Sensitivity Threshold", 0.00, 1.00, 0.040, scale=1000, step=0.01, digits=3, signed=False, parent_layout=prec_layout, param_key="threshold"
         )
+        prec_layout.addStretch(1)
 
-        layout.addWidget(card_prec)
-        layout.addStretch(1)
+        layout.addWidget(card_prec, 30)
+
+        self._sidebar_cards = {
+            "project": card_proj,
+            "enhancement": card_enh,
+            "precision": card_prec,
+        }
 
         scroll.setWidget(inner)
         outer_layout.addWidget(scroll, 1)
 
-        # Primary Action Button pinned cleanly at bottom
-        self._btn_run = QPushButton("▶   Run Enhancement", panel)
+        # Anchored Primary Action Button (full width, comfortable height, muted blue accent)
+        self._btn_run = QPushButton(" Run Enhancement", panel)
         self._btn_run.setObjectName("btnPrimary")
+        self._btn_run.setIcon(create_studio_icon("play", "#FFFFFF", 13))
+        self._btn_run.setIconSize(QSize(13, 13))
+        self._btn_run.setMinimumHeight(36)
+        self._btn_run.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self._btn_run.clicked.connect(self._on_run_enhancement)
         outer_layout.addWidget(self._btn_run)
 
@@ -2616,9 +2679,11 @@ class MirageStudioMainWindow(QMainWindow):
         signed: bool = False,
         param_key: str = "",
     ) -> Tuple[QSlider, QLabel]:
-        block = QVBoxLayout()
+        block_widget = QWidget(self)
+        block_widget.setObjectName("transparentInner")
+        block = QVBoxLayout(block_widget)
         block.setContentsMargins(0, 0, 0, 0)
-        block.setSpacing(3)
+        block.setSpacing(2)
 
         min_int = int(round(min_val * scale))
         max_int = int(round(max_val * scale))
@@ -2635,51 +2700,53 @@ class MirageStudioMainWindow(QMainWindow):
 
         row_header = QHBoxLayout()
         row_header.setSpacing(4)
-        lbl_name = QLabel(name, self)
-        lbl_name.setFont(studio_font(lbl_name, point_size=9, bold=False))
+        lbl_name = QLabel(name, block_widget)
+        lbl_name.setFont(studio_font(lbl_name, point_size=8 if len(name) > 14 else 9, bold=False))
         lbl_name.setStyleSheet(f"color: {TEXT_PRIMARY};")
         row_header.addWidget(lbl_name)
         row_header.addStretch(1)
 
-        lbl_step = QLabel(f"±{step:.2f}", self)
+        lbl_step = QLabel(f"±{step:.2f}", block_widget)
         lbl_step.setFont(studio_font(lbl_step, point_size=7, bold=False))
-        lbl_step.setStyleSheet(f"color: {TEXT_MUTED};")
+        lbl_step.setStyleSheet(f"color: {TEXT_SECONDARY};")
         lbl_step.setToolTip(f"Adjustment step: {step:.2f} (range {min_val:.2f} to {max_val:.2f})")
         row_header.addWidget(lbl_step)
 
-        lbl_val = QLabel(_fmt_value(init_int), self)
+        lbl_val = QLabel(_fmt_value(init_int), block_widget)
         lbl_val.setProperty("class", "valBadge")
-        lbl_val.setMinimumWidth(48)
+        lbl_val.setMinimumWidth(44)
+        lbl_val.setMinimumHeight(17)
         row_header.addWidget(lbl_val)
         block.addLayout(row_header)
 
         ctrl_row = QHBoxLayout()
-        ctrl_row.setSpacing(5)
+        ctrl_row.setSpacing(6)
 
-        btn_dec = QToolButton(self)
+        btn_dec = QToolButton(block_widget)
         btn_dec.setProperty("class", "stepBtn")
         btn_dec.setText("−")
-        btn_dec.setFixedSize(20, 20)
+        btn_dec.setFixedSize(22, 22)
         btn_dec.setToolTip(f"Decrease {name} by {step:.2f}")
         ctrl_row.addWidget(btn_dec)
 
-        slider = QSlider(Qt.Horizontal, self)
+        slider = QSlider(Qt.Horizontal, block_widget)
         slider.setMinimumWidth(80)
+        slider.setMinimumHeight(22)
         slider.setRange(min_int, max_int)
         slider.setSingleStep(step_int)
         slider.setPageStep(step_int * 2)
         slider.setValue(init_int)
         ctrl_row.addWidget(slider, 1)
 
-        btn_inc = QToolButton(self)
+        btn_inc = QToolButton(block_widget)
         btn_inc.setProperty("class", "stepBtn")
         btn_inc.setText("+")
-        btn_inc.setFixedSize(20, 20)
+        btn_inc.setFixedSize(24, 24)
         btn_inc.setToolTip(f"Increase {name} by {step:.2f}")
         ctrl_row.addWidget(btn_inc)
 
         block.addLayout(ctrl_row)
-        parent_layout.addLayout(block)
+        parent_layout.addWidget(block_widget)
 
         slider.valueChanged.connect(lambda v: lbl_val.setText(_fmt_value(v)))
         btn_dec.clicked.connect(lambda: slider.setValue(max(min_int, slider.value() - step_int)))
@@ -2687,6 +2754,7 @@ class MirageStudioMainWindow(QMainWindow):
 
         key = param_key or name.lower()
         self._param_controls[key] = {
+            "container": block_widget,
             "slider": slider,
             "label": lbl_val,
             "dec_btn": btn_dec,
@@ -3837,11 +3905,28 @@ class MirageStudioMainWindow(QMainWindow):
         )
         QtWidgets.QMessageBox.information(self, "Mirage Studio Settings & Diagnostics", info_text)
 
+    def _update_run_button_state(self, running: bool = False) -> None:
+        if running:
+            self._btn_run.setEnabled(False)
+            self._btn_run.setText(" Processing...")
+            self._btn_run.setToolTip("Backend enhancement pipeline is executing")
+            return
+        has_valid_img = bool(self._active_image_path and os.path.isfile(self._active_image_path))
+        self._btn_run.setEnabled(has_valid_img and bool(self._mirage_bin))
+        self._btn_run.setText(" Run Enhancement")
+        if not self._mirage_bin:
+            self._btn_run.setToolTip("Mirage CLI binary not found")
+        elif not has_valid_img:
+            self._btn_run.setToolTip("Open or select a valid image to run enhancement")
+        else:
+            self._btn_run.setToolTip("Execute image enhancement pipeline with current parameters")
+
     def _on_image_selected(self, image_path: str) -> None:
         self._active_image_path = image_path
         self._viewer.set_images(image_path, image_path, "Input")
         self._viewer.fit_to_screen()
         self._overlay_viewer.set_source_images(image_path, "")
+        self._update_run_button_state(running=False)
         self._status_text.setText(f"Loaded {Path(image_path).name} | Ready to enhance")
 
     # -----------------------------------------------------------------------
@@ -4265,8 +4350,7 @@ class MirageStudioMainWindow(QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Warning", "Please select a valid input image.")
             return
 
-        self._btn_run.setEnabled(False)
-        self._btn_run.setText("Processing...")
+        self._update_run_button_state(running=True)
         self._status_icon.setText("● RUNNING")
         self._status_icon.setStyleSheet(f"color: {ACCENT_ORANGE}; font-weight: bold;")
         self._status_text.setText("Executing adaptive enhancement pipeline via C++ Mirage CLI...")
@@ -4326,8 +4410,7 @@ class MirageStudioMainWindow(QMainWindow):
     def _on_process_error(self, error: QtCore.QProcess.ProcessError) -> None:
         # Handle startup / spawn failures that never emit QProcess.finished
         if error == QtCore.QProcess.FailedToStart:
-            self._btn_run.setEnabled(True)
-            self._btn_run.setText("▶   Run Enhancement")
+            self._update_run_button_state(running=False)
             diag = (
                 f"Failed to launch Mirage binary ({self._mirage_bin}): "
                 f"{self._process.errorString() if self._process else 'Unknown spawn error'}. "
@@ -4352,8 +4435,7 @@ class MirageStudioMainWindow(QMainWindow):
         tau_val: float,
         exit_status: QtCore.QProcess.ExitStatus = QtCore.QProcess.NormalExit,
     ) -> None:
-        self._btn_run.setEnabled(True)
-        self._btn_run.setText("▶   Run Enhancement")
+        self._update_run_button_state(running=False)
 
         if exit_code != 0 or exit_status != QtCore.QProcess.NormalExit:
             err = bytes(self._process.readAllStandardError()).decode("utf-8", errors="replace").strip()

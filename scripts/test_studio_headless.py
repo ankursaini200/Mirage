@@ -246,9 +246,28 @@ def main() -> int:
     app.processEvents()
     assert win.grab().save(str(screenshot_path))
 
-    # Capture focused panel screenshots (Enhancement Panel + Analytics Panel) and assert zero horizontal clipping
+    # Verify missing/invalid image disables Run Enhancement cleanly
+    win_no_img = ms.MirageStudioMainWindow(initial_image="/nonexistent/missing_image.png")
+    assert not win_no_img._btn_run.isEnabled(), "Run Enhancement must be disabled when no valid image is loaded"
+    assert "valid image" in win_no_img._btn_run.toolTip().lower()
+    win_no_img.close()
+    assert win._btn_run.isEnabled(), "Run Enhancement must be enabled once a valid image is loaded"
+
+    # Capture focused panel screenshots & verify proportional vertical space utilization at 1340x840
     enh_panel = win.findChild(QtWidgets.QFrame, "leftAdjustmentPanel")
     assert enh_panel is not None
+    c_proj = win._sidebar_cards["project"]
+    c_enh = win._sidebar_cards["enhancement"]
+    c_prec = win._sidebar_cards["precision"]
+    assert c_enh.height() > c_prec.height() > c_proj.height(), (
+        f"Expected proportional heights enh > prec > proj, got enh={c_enh.height()}, prec={c_prec.height()}, proj={c_proj.height()}"
+    )
+    prec_bottom = c_prec.mapTo(enh_panel, QtCore.QPoint(0, c_prec.height() - 1)).y()
+    run_top = win._btn_run.mapTo(enh_panel, QtCore.QPoint(0, 0)).y()
+    assert 0 <= (run_top - prec_bottom) <= 28, (
+        f"Unexpected empty gap between Precision ({prec_bottom}) and Run Enhancement ({run_top})"
+    )
+
     for pkey, ctrl in win._param_controls.items():
         for wname in ("label", "step_label", "inc_btn", "dec_btn", "slider"):
             w = ctrl[wname]
@@ -259,7 +278,7 @@ def main() -> int:
     assert enh_panel.grab().save(str(docs_img_dir / "enhancement_panel_refined.png"))
     analytics_panel = win._overlay_viewer.parentWidget()
     assert analytics_panel is not None and analytics_panel.grab().save(str(docs_img_dir / "analytics_panel_refined.png"))
-    print("  ✓ Verified zero horizontal clipping on all enhancement controls & captured panel screenshots")
+    print(f"  ✓ Verified proportional sidebar fill (proj={c_proj.height()}px, enh={c_enh.height()}px, prec={c_prec.height()}px) & zero clipping")
 
     # Failure preservation check: trigger a genuine failing QProcess run and verify Run #2 Results stay intact
     print("[Headless Test] Verifying real QProcess failure resilience (preserving Run #2 Results)...")
@@ -294,14 +313,47 @@ def main() -> int:
     assert win_fresh.grab().save(str(docs_img_empty))
     print(f"  ✓ Restart empty-state behavior verified & captured at: {docs_img_empty}")
 
-    # Verify responsive layout scaling on small window (1080x700) and 2K display (2560x1440)
-    for (rw, rh) in [(1080, 700), (2560, 1440), (1340, 840)]:
+    # Verify responsive layout scaling on small window (1080x700), short scrollable window (1080x560), and 2K display (2560x1440)
+    win.setMinimumHeight(520)  # Temporarily allow verifying short-window sidebar scrolling behavior
+    for (rw, rh, shot_name) in [
+        (1080, 700, "sidebar_small_window.png"),
+        (1080, 560, ""),
+        (2560, 1440, "sidebar_2k.png"),
+        (1340, 840, ""),
+    ]:
         win.resize(rw, rh)
         app.processEvents()
-        assert win._btn_run.isVisible() and win._btn_run.height() >= 28, f"Primary CTA unusable at {rw}x{rh}"
+        assert win._btn_run.isVisible() and win._btn_run.height() >= 34, f"Primary CTA unusable at {rw}x{rh}"
         assert win._viewer.width() >= 340, f"Center viewer too narrow at {rw}x{rh}: {win._viewer.width()}"
+        # Assert zero horizontal clipping of EVERY control in leftAdjustmentPanel at this resolution
+        for pkey, ctrl in win._param_controls.items():
+            for wname in ("label", "step_label", "inc_btn", "dec_btn", "slider"):
+                w = ctrl[wname]
+                rx = w.mapTo(enh_panel, QtCore.QPoint(w.width() - 1, 0)).x()
+                assert 0 <= rx < enh_panel.width(), (
+                    f"{pkey}.{wname} clipped at {rw}x{rh}: right_x={rx}, panel_w={enh_panel.width()}"
+                )
+        for combo in (win._combo_mode, win._combo_policy, win._combo_tilesize):
+            rx = combo.mapTo(enh_panel, QtCore.QPoint(combo.width() - 1, 0)).x()
+            assert 0 <= rx < enh_panel.width(), f"Combo clipped at {rw}x{rh}: right_x={rx}, panel_w={enh_panel.width()}"
+        scroll_area = enh_panel.findChild(QtWidgets.QScrollArea)
+        assert scroll_area is not None
+        if rh == 560:
+            assert scroll_area.verticalScrollBar().maximum() > 0, "Sidebar must scroll vertically on short windows"
+        else:
+            assert scroll_area.verticalScrollBar().maximum() == 0, (
+                f"Unexpected scrollbar at {rw}x{rh}: max={scroll_area.verticalScrollBar().maximum()}"
+            )
+            assert c_enh.height() > c_prec.height() > c_proj.height()
+            p_bot = c_prec.mapTo(enh_panel, QtCore.QPoint(0, c_prec.height() - 1)).y()
+            r_top = win._btn_run.mapTo(enh_panel, QtCore.QPoint(0, 0)).y()
+            assert 0 <= (r_top - p_bot) <= 32, f"Large gap above CTA at {rw}x{rh}: p_bot={p_bot}, r_top={r_top}"
+        if shot_name:
+            assert enh_panel.grab().save(str(docs_img_dir / shot_name))
+            print(f"  ✓ Saved responsive sidebar screenshot at {rw}x{rh}: {docs_img_dir / shot_name}")
         assert not win.grab().isNull()
-    print("  ✓ Responsive scaling verified across 1080x700, 1340x840, and 2K (2560x1440)")
+    win.setMinimumHeight(700)
+    print("  ✓ Responsive scaling verified across 1080x560 (scroll), 1080x700, 1340x840, and 2K (2560x1440)")
     print("  ✓ All navigation tabs verified (Enhance, Analyze, Benchmark, Experiments, Results)")
 
     print("[Headless Test] All verification checks PASSED successfully!")

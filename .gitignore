@@ -1,31 +1,70 @@
-# Build directories
-build/
-bin/
-lib/
-out/
-output/
+# Build directories & artifacts
+/build/
+/cmake-build-*/
+/out/
+/bin/
+/lib/
 third_party/
 .cache/
-sample_image.png
-
-# IDE & Editor artifacts
-.vscode/
-.idea/
-*.code-workspace
-*.swp
-*.swo
-*~
-.DS_Store
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
 
 # CMake generated files
 CMakeUserPresets.json
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+CTestTestfile.cmake
 Makefile
 compile_commands.json
-CTestTestfile.cmake
 Testing/
+!CMakePresets.json
+!CMakeUserPresets.json.example
+
+# Temporary development files
+/scratch/
+/tmp/
+/temp/
+*.bak
+*.tmp
+*.orig
+*.swp
+*.swo
+*~
+
+# IDE & Editor artifacts
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Python artifacts & environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated enhancement & benchmark outputs
+/output/
+/output/enhanced/
+/output/temp/
+benchmark_results/
+sample_image.png
+*.log
 
 # Profiling and performance outputs
 *.perf
@@ -33,20 +72,15 @@ perf.data*
 gmon.out
 callgrind.out.*
 
-# Python artifacts
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.venv/
-env/
-
 # Doxygen documentation output
 docs/html/
 docs/latex/
 docs/xml/
 
-# Benchmark output files
-benchmark_results/
-!CMakePresets.json
-!CMakeUserPresets.json.example
+# Environment & local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json

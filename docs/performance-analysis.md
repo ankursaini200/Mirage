@@ -256,8 +256,8 @@ AVX2 improves full-pipeline execution by **$1.11\times$ on 1080p** (36.5 ms vs 4
 ## 9. Generated Artifacts & Reproduction Commands
 
 ### Artifact Locations
-- **Benchmark Results CSV**: [`benchmarks/results/benchmark_results.csv`](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/results/benchmark_results.csv) (56 detailed execution records)
-- **Tile Analysis CSV**: [`benchmarks/results/tile_analysis.csv`](file:///home/ankur/Code%20Playground/COA%20Project/Mirage/benchmarks/results/tile_analysis.csv)
+- **Benchmark Results CSV**: [`benchmarks/results/benchmark_results.csv`](../benchmarks/results/benchmark_results.csv) (56 detailed execution records)
+- **Tile Analysis CSV**: [`benchmarks/results/tile_analysis.csv`](../benchmarks/results/tile_analysis.csv)
 - **Publication Charts**:
   - `benchmarks/plots/runtime_vs_resolution.png`
   - `benchmarks/plots/scalar_vs_avx2_speedup.png`
