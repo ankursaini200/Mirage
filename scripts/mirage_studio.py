@@ -84,39 +84,44 @@ DEFAULT_IMAGE_PATH = PROJECT_ROOT / "data" / "experiments" / "natural_scene.png"
 if not DEFAULT_IMAGE_PATH.exists():
     DEFAULT_IMAGE_PATH = PROJECT_ROOT / "data" / "experiments" / "smooth_gradient.png"
 
-# Color Palette Constants — Premium Graphite Creative Studio
-BG_MAIN = "#090C11"             # Main application background
-BG_BOTTOM_DARK = "#080B10"      # Bottom background gradient stop
-BG_WORKSPACE = "#151B23"        # Main workspace / gradient start
-BG_SECONDARY = "#28333D"        # Secondary panels
-BG_ADJUSTMENT = "#394651"       # Adjustment panels
-BG_CONTROL = "#53616C"          # Control surfaces
-BORDER_COLOR = "#35414B"        # Subtle blue-grey borders
-BORDER_ACCENT = "#477FA8"       # Focused / active border accent
+# Color Palette Constants — Darker Graphite Creative Studio
+BG_MAIN = "#090C10"             # Main background
+BG_BOTTOM_DARK = "#080B10"      # Bottom dark charcoal base
+BG_WORKSPACE = "#121820"        # Main panel / workspace surface
+BG_SECONDARY = "#121820"        # Main panels & sidebars
+BG_ADJUSTMENT = "#19212A"       # Card background inside panels
+BG_SUBCARD = "#19212A"          # Card background (analytics & groups)
+BG_CONTROL = "#202A34"          # Control background (inputs, combos, buttons)
+BORDER_COLOR = "#303B46"        # Subtle graphite borders
+BORDER_ACCENT = "#527FA6"       # Focused / active border accent
 
-# Semantic Graphite Layers & Compatibility Aliases
+# Slider Tokens
+SLIDER_INACTIVE = "#303B46"     # Slider inactive track
+SLIDER_ACTIVE = "#527D9B"       # Slider active track
+SLIDER_HANDLE = "#C4D0D9"       # Slider handle
+
+# Compatibility Aliases
 BG_PRIMARY = BG_MAIN
 BG_SURFACE = BG_SECONDARY
 BG_INPUT = BG_WORKSPACE
-BG_SUBCARD = "#1B232D"          # Recessed analytics sub-card surface
-BG_HOVER = "#303D48"
+BG_HOVER = "#26323E"
 
 SLATE_BG = BG_MAIN
 SLATE_PANEL = BG_SECONDARY
 SLATE_SURFACE = BG_ADJUSTMENT
-SLATE_ACCENT = "#477FA8"
-SLATE_ACCENT_LIGHT = "#5C96C2"
+SLATE_ACCENT = "#527FA6"
+SLATE_ACCENT_LIGHT = "#6795BC"
 
-ACCENT_BLUE = "#477FA8"         # Selection accent & FP32 indicator
-ACCENT_BLUE_LIGHT = "#5C96C2"   # Restrained hover / highlight state
-ACCENT_BLUE_DARK = "#366588"    # Restrained pressed state
+ACCENT_BLUE = "#527FA6"         # FP32 indicator & selection accent
+ACCENT_BLUE_LIGHT = "#6795BC"   # Restrained hover / highlight state
+ACCENT_BLUE_DARK = "#3E6687"    # Restrained pressed state
 ACCENT_GREEN = "#35A879"        # FP16 indicator & Ready state
 ACCENT_ORANGE = "#D9944A"       # Running / active progress state
 ACCENT_RED = "#D15B5B"          # Error / unavailable indicator
 
-TEXT_PRIMARY = "#E5E9ED"        # Primary text
-TEXT_SECONDARY = "#A6B0B9"      # Secondary text
-TEXT_MUTED = "#82909B"          # Muted text
+TEXT_PRIMARY = "#E0E5E9"        # Primary text
+TEXT_SECONDARY = "#929DA8"      # Secondary text
+TEXT_MUTED = "#76828E"          # Muted labels & unavailable states
 
 
 def find_mirage_binary() -> Optional[Path]:
@@ -526,19 +531,153 @@ def draw_turbo_colorbar(painter: QPainter, x: float, y: float, width: float, hei
     painter.drawText(int(x - 22), int(y + height), "0.0")
 
 
+def create_studio_icon(kind: str, color: str = TEXT_SECONDARY, size: int = 16) -> QIcon:
+    """Paint crisp, restrained monochrome vector icons without bright OS emojis."""
+    pix = QPixmap(size * 2, size * 2)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(QColor(color), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+
+    s = float(size * 2)
+    if kind == "open":
+        poly = QPolygonF([
+            QPointF(s * 0.16, s * 0.30),
+            QPointF(s * 0.40, s * 0.30),
+            QPointF(s * 0.48, s * 0.40),
+            QPointF(s * 0.84, s * 0.40),
+            QPointF(s * 0.84, s * 0.78),
+            QPointF(s * 0.16, s * 0.78),
+        ])
+        p.drawPolygon(poly)
+    elif kind == "save":
+        p.drawRoundedRect(QRectF(s * 0.18, s * 0.18, s * 0.64, s * 0.64), 3, 3)
+        p.drawRect(QRectF(s * 0.30, s * 0.18, s * 0.38, s * 0.22))
+        p.drawRect(QRectF(s * 0.28, s * 0.54, s * 0.44, s * 0.28))
+    elif kind == "export":
+        p.drawRoundedRect(QRectF(s * 0.22, s * 0.16, s * 0.56, s * 0.68), 3, 3)
+        p.drawLine(QPointF(s * 0.34, s * 0.38), QPointF(s * 0.66, s * 0.38))
+        p.drawLine(QPointF(s * 0.34, s * 0.52), QPointF(s * 0.66, s * 0.52))
+        p.drawLine(QPointF(s * 0.34, s * 0.66), QPointF(s * 0.54, s * 0.66))
+    elif kind == "settings":
+        cx, cy = s * 0.5, s * 0.5
+        p.drawEllipse(QPointF(cx, cy), s * 0.14, s * 0.14)
+        p.drawEllipse(QPointF(cx, cy), s * 0.28, s * 0.28)
+        for deg in range(0, 360, 45):
+            rad = math.radians(deg)
+            p.drawLine(
+                QPointF(cx + math.cos(rad) * s * 0.28, cy + math.sin(rad) * s * 0.28),
+                QPointF(cx + math.cos(rad) * s * 0.36, cy + math.sin(rad) * s * 0.36),
+            )
+    elif kind == "zoom_in":
+        p.drawEllipse(QPointF(s * 0.44, s * 0.44), s * 0.24, s * 0.24)
+        p.drawLine(QPointF(s * 0.62, s * 0.62), QPointF(s * 0.82, s * 0.82))
+        p.drawLine(QPointF(s * 0.34, s * 0.44), QPointF(s * 0.54, s * 0.44))
+        p.drawLine(QPointF(s * 0.44, s * 0.34), QPointF(s * 0.44, s * 0.54))
+    elif kind == "zoom_out":
+        p.drawEllipse(QPointF(s * 0.44, s * 0.44), s * 0.24, s * 0.24)
+        p.drawLine(QPointF(s * 0.62, s * 0.62), QPointF(s * 0.82, s * 0.82))
+        p.drawLine(QPointF(s * 0.34, s * 0.44), QPointF(s * 0.54, s * 0.44))
+    elif kind == "fit":
+        for (x0, y0, dx, dy) in [
+            (0.20, 0.20, 0.18, 0.18),
+            (0.80, 0.20, -0.18, 0.18),
+            (0.20, 0.80, 0.18, -0.18),
+            (0.80, 0.80, -0.18, -0.18),
+        ]:
+            p.drawLine(QPointF(s * x0, s * y0), QPointF(s * (x0 + dx), s * y0))
+            p.drawLine(QPointF(s * x0, s * y0), QPointF(s * x0, s * (y0 + dy)))
+    elif kind == "pan":
+        cx, cy = s * 0.5, s * 0.5
+        p.drawLine(QPointF(s * 0.20, cy), QPointF(s * 0.80, cy))
+        p.drawLine(QPointF(cx, s * 0.20), QPointF(cx, s * 0.80))
+    elif kind == "split":
+        p.drawRoundedRect(QRectF(s * 0.18, s * 0.22, s * 0.64, s * 0.56), 3, 3)
+        p.drawLine(QPointF(s * 0.50, s * 0.18), QPointF(s * 0.50, s * 0.82))
+    elif kind == "layers":
+        p.drawRoundedRect(QRectF(s * 0.18, s * 0.22, s * 0.56, s * 0.48), 2, 2)
+        p.drawRoundedRect(QRectF(s * 0.30, s * 0.34, s * 0.52, s * 0.44), 2, 2)
+    elif kind == "win_min":
+        p.drawLine(QPointF(s * 0.26, s * 0.54), QPointF(s * 0.74, s * 0.54))
+    elif kind == "win_max":
+        p.drawRect(QRectF(s * 0.26, s * 0.26, s * 0.48, s * 0.48))
+    elif kind == "win_close":
+        p.drawLine(QPointF(s * 0.28, s * 0.28), QPointF(s * 0.72, s * 0.72))
+        p.drawLine(QPointF(s * 0.72, s * 0.28), QPointF(s * 0.28, s * 0.72))
+
+    p.end()
+    return QIcon(pix)
+
+
+class MirageLogoWidget(QWidget):
+    """Restrained geometric Mirage 'M' emblem in graphite, slate grey, and accent blue."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(30, 30)
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = QRectF(1.0, 1.0, self.width() - 2.0, self.height() - 2.0)
+        painter.setBrush(QColor(BG_WORKSPACE))
+        painter.setPen(QPen(QColor(BORDER_COLOR), 1.0))
+        painter.drawRoundedRect(rect, 6.0, 6.0)
+
+        # Left prism stroke (Steel Blue #477FA8)
+        left_wing = QPolygonF([
+            QPointF(6.5, 22.5),
+            QPointF(6.5, 7.5),
+            QPointF(15.0, 16.5),
+            QPointF(15.0, 21.0),
+            QPointF(9.8, 15.2),
+            QPointF(9.8, 22.5),
+        ])
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(ACCENT_BLUE))
+        painter.drawPolygon(left_wing)
+
+        # Right prism stroke (Light Graphite #E5E9ED)
+        right_wing = QPolygonF([
+            QPointF(23.5, 22.5),
+            QPointF(23.5, 7.5),
+            QPointF(15.0, 16.5),
+            QPointF(15.0, 21.0),
+            QPointF(20.2, 15.2),
+            QPointF(20.2, 22.5),
+        ])
+        painter.setBrush(QColor(TEXT_PRIMARY))
+        painter.drawPolygon(right_wing)
+
+
 # ---------------------------------------------------------------------------
-# Dark Creative Studio Theme Stylesheet
+# Premium Graphite Creative Studio Theme Stylesheet
 # ---------------------------------------------------------------------------
 DARK_STUDIO_QSS = f"""
 QMainWindow, QWidget#centralWidget {{
-    background-color: {BG_PRIMARY};
+    background-color: {BG_MAIN};
     color: {TEXT_PRIMARY};
     font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
 }}
 
+QWidget#workspacePage {{
+    background-color: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0.00 {BG_WORKSPACE},
+        stop:0.78 {BG_MAIN},
+        stop:1.00 {BG_BOTTOM_DARK}
+    );
+}}
+
+QWidget#transparentInner {{
+    background-color: transparent;
+}}
+
 /* Top Navigation Bar */
 QFrame#topNavBar {{
-    background-color: {BG_PRIMARY};
+    background-color: {BG_MAIN};
     border-bottom: 1px solid {BORDER_COLOR};
     padding: 4px 12px;
 }}
@@ -548,7 +687,7 @@ QLabel#brandTitle {{
     font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 16px;
     font-weight: 800;
-    letter-spacing: 2.0px;
+    letter-spacing: 2.2px;
 }}
 
 QLabel#brandSubtitle {{
@@ -556,258 +695,430 @@ QLabel#brandSubtitle {{
     font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.7px;
 }}
 
 QPushButton.navTab {{
     background-color: transparent;
     color: {TEXT_SECONDARY};
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
     padding: 6px 14px;
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 12px;
     font-weight: 600;
 }}
 
 QPushButton.navTab:hover {{
     color: {TEXT_PRIMARY};
-    background-color: rgba(138, 79, 255, 0.15);
+    background-color: rgba(71, 127, 168, 0.16);
+    border: 1px solid {BORDER_COLOR};
 }}
 
 QPushButton.navTab:checked {{
     color: #ffffff;
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_PURPLE}, stop:1 {ACCENT_PURPLE_GRADIENT_END});
-    font-weight: bold;
+    background-color: {ACCENT_BLUE};
+    border: 1px solid {ACCENT_BLUE_LIGHT};
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-weight: 700;
 }}
 
-/* Sidebars and Panels */
+/* Darker Charcoal/Graphite Panels (#121820) & Nested Cards (#19212A) */
 QFrame.panelCard {{
-    background-color: {BG_SURFACE};
+    background-color: {BG_SECONDARY};
     border: 1px solid {BORDER_COLOR};
     border-radius: 8px;
-    padding: 10px;
-}}
-
-QFrame.subCard {{
-    background-color: {BG_INPUT};
-    border: 1px solid {BORDER_COLOR};
-    border-radius: 6px;
     padding: 8px;
 }}
 
-QLabel.sectionHeader {{
-    color: {TEXT_PRIMARY};
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    margin-bottom: 4px;
+QFrame.subCard,
+QFrame.leftCard {{
+    background-color: {BG_SUBCARD};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 6px;
+    padding: 6px;
 }}
 
-QLabel.subHeader {{
-    color: {TEXT_SECONDARY};
+/* Left Adjustment Panel (#121820 main panel, #19212A section cards, #202A34 controls) */
+QFrame#leftAdjustmentPanel {{
+    background-color: {BG_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 8px;
+}}
+
+QFrame#leftAdjustmentPanel QPushButton {{
+    background-color: {BG_CONTROL};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 5px;
+    padding: 4px 9px;
+    text-align: left;
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 10px;
     font-weight: 600;
 }}
 
-/* Sliders */
+QFrame#leftAdjustmentPanel QPushButton:hover {{
+    background-color: {BG_HOVER};
+    border: 1px solid {ACCENT_BLUE};
+}}
+
+QFrame#leftAdjustmentPanel QPushButton:pressed {{
+    background-color: {BG_MAIN};
+}}
+
+QFrame#leftAdjustmentPanel QComboBox {{
+    background-color: {BG_CONTROL};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-size: 10px;
+    min-height: 18px;
+}}
+
+QFrame#leftAdjustmentPanel QComboBox:hover {{
+    border: 1px solid {ACCENT_BLUE};
+}}
+
+QFrame#leftAdjustmentPanel QLabel.subHeader {{
+    color: {TEXT_SECONDARY};
+}}
+
+QToolButton.stepBtn {{
+    background-color: {BG_CONTROL};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 4px;
+    padding: 0px;
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+}}
+
+QToolButton.stepBtn:hover {{
+    background-color: {BG_HOVER};
+    border: 1px solid {ACCENT_BLUE};
+    color: #ffffff;
+}}
+
+QToolButton.stepBtn:pressed {{
+    background-color: {ACCENT_BLUE_DARK};
+}}
+
+QToolButton.stepBtn:disabled {{
+    background-color: {BG_WORKSPACE};
+    border: 1px solid {BORDER_COLOR};
+    color: {TEXT_MUTED};
+}}
+
+/* Bottom Gradient Region (#121820 to #080B10) */
+QFrame#bottomFilmstripRegion {{
+    background-color: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0 {BG_WORKSPACE},
+        stop:1 {BG_BOTTOM_DARK}
+    );
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 8px;
+}}
+
+QLabel.sectionHeader {{
+    color: {TEXT_PRIMARY};
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    margin-bottom: 1px;
+}}
+
+QLabel.subHeader {{
+    color: {TEXT_SECONDARY};
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+}}
+
+/* Darker Graphite Sliders (#303B46 track, #527D9B active fill, #C4D0D9 handle) */
 QSlider::groove:horizontal {{
-    height: 5px;
-    background-color: {BG_INPUT};
+    height: 4px;
+    background-color: {SLIDER_INACTIVE};
     border-radius: 2px;
 }}
 
 QSlider::sub-page:horizontal {{
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_PURPLE}, stop:1 {ACCENT_PURPLE_LIGHT});
+    background-color: {SLIDER_ACTIVE};
     border-radius: 2px;
 }}
 
 QSlider::handle:horizontal {{
-    background-color: #ffffff;
-    border: 2px solid {ACCENT_PURPLE};
-    width: 14px;
-    height: 14px;
-    margin: -5px 0;
-    border-radius: 7px;
+    background-color: {SLIDER_HANDLE};
+    border: 1.5px solid {SLIDER_ACTIVE};
+    width: 11px;
+    height: 11px;
+    margin: -4px 0;
+    border-radius: 6px;
 }}
 
 QSlider::handle:horizontal:hover {{
-    background-color: {ACCENT_PURPLE_LIGHT};
-    border: 2px solid #ffffff;
+    background-color: {TEXT_PRIMARY};
+    border: 1.5px solid {ACCENT_BLUE_LIGHT};
+}}
+
+QSlider::handle:horizontal:disabled {{
+    background-color: {BG_CONTROL};
+    border: 1px solid {BORDER_COLOR};
 }}
 
 /* Combo Boxes */
 QComboBox {{
-    background-color: {BG_INPUT};
+    background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 11px;
+    border-radius: 5px;
+    padding: 4px 9px;
+    font-size: 10px;
 }}
 
 QComboBox:hover {{
-    border: 1px solid {BORDER_ACCENT};
+    border: 1px solid {ACCENT_BLUE};
 }}
 
 QComboBox::drop-down {{
     border: none;
-    width: 20px;
+    width: 18px;
 }}
 
 QComboBox QAbstractItemView {{
-    background-color: {BG_SURFACE};
+    background-color: {BG_ADJUSTMENT};
     color: {TEXT_PRIMARY};
-    selection-background-color: {ACCENT_PURPLE};
+    selection-background-color: {ACCENT_BLUE};
     selection-color: #ffffff;
     border: 1px solid {BORDER_COLOR};
     border-radius: 4px;
     outline: none;
 }}
 
-/* Push Buttons */
+/* Push Buttons & Tool Buttons */
 QPushButton {{
-    background-color: {BG_INPUT};
+    background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 11px;
+    border-radius: 5px;
+    padding: 5px 11px;
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 10px;
     font-weight: 600;
 }}
 
 QPushButton:hover {{
     background-color: {BG_HOVER};
-    border: 1px solid {BORDER_ACCENT};
+    border: 1px solid {ACCENT_BLUE};
 }}
 
 QPushButton:pressed {{
-    background-color: {BG_PRIMARY};
+    background-color: {BG_MAIN};
+}}
+
+QToolButton {{
+    background-color: transparent;
+    color: {TEXT_SECONDARY};
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 4px 7px;
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+}}
+
+QToolButton:hover {{
+    background-color: {BG_CONTROL};
+    border: 1px solid {BORDER_COLOR};
+    color: {TEXT_PRIMARY};
+}}
+
+QToolButton:checked {{
+    background-color: {ACCENT_BLUE};
+    border: 1px solid {ACCENT_BLUE_LIGHT};
+    color: #ffffff;
 }}
 
 QPushButton.subTab {{
-    background-color: {BG_INPUT};
+    background-color: {BG_ADJUSTMENT};
     color: {TEXT_SECONDARY};
     border: 1px solid {BORDER_COLOR};
     border-radius: 5px;
     padding: 4px 8px;
+    font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
     font-size: 10px;
     font-weight: 600;
 }}
 
 QPushButton.subTab:hover {{
     color: {TEXT_PRIMARY};
-    background-color: {BG_HOVER};
-    border: 1px solid {BORDER_ACCENT};
+    background-color: {BG_CONTROL};
+    border: 1px solid {ACCENT_BLUE};
 }}
 
 QPushButton.subTab:checked {{
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_PURPLE}, stop:1 {ACCENT_PURPLE_GRADIENT_END});
+    background-color: {ACCENT_BLUE};
     color: #ffffff;
-    font-weight: bold;
-    border: 1px solid {ACCENT_PURPLE};
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-weight: 700;
+    border: 1px solid {ACCENT_BLUE_LIGHT};
 }}
 
+QFrame#leftAdjustmentPanel QPushButton#btnPrimary,
 QPushButton#btnPrimary {{
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_PURPLE}, stop:1 {ACCENT_PURPLE_GRADIENT_END});
+    background-color: {ACCENT_BLUE};
     color: #ffffff;
-    border: none;
-    border-radius: 7px;
-    padding: 10px 16px;
-    font-size: 13px;
+    border: 1px solid {ACCENT_BLUE_LIGHT};
+    border-radius: 6px;
+    padding: 8px 14px;
+    text-align: center;
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 12px;
     font-weight: 700;
 }}
 
+QFrame#leftAdjustmentPanel QPushButton#btnPrimary:hover,
 QPushButton#btnPrimary:hover {{
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #9d65ff, stop:1 #7d44fb);
+    background-color: {ACCENT_BLUE_LIGHT};
+    border: 1px solid #7BA7CC;
 }}
 
+QFrame#leftAdjustmentPanel QPushButton#btnPrimary:pressed,
 QPushButton#btnPrimary:pressed {{
-    background-color: #5b28d0;
+    background-color: {ACCENT_BLUE_DARK};
 }}
 
+QFrame#leftAdjustmentPanel QPushButton#btnPrimary:disabled,
 QPushButton#btnPrimary:disabled {{
-    background-color: #38344e;
-    color: #726f86;
+    background-color: {BG_CONTROL};
+    border: 1px solid {BORDER_COLOR};
+    color: {TEXT_MUTED};
 }}
 
 /* Badges & Value Labels */
 QLabel.valBadge {{
-    background-color: {BG_PRIMARY};
+    background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER_COLOR};
     border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 10px;
-    font-weight: 600;
-    min-width: 42px;
+    padding: 1px 6px;
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 44px;
     qproperty-alignment: AlignCenter;
 }}
 
-/* Status Bar */
+/* Tables & Headers Across All Tabs */
+QTableWidget {{
+    background-color: {BG_MAIN};
+    alternate-background-color: {BG_WORKSPACE};
+    color: {TEXT_PRIMARY};
+    gridline-color: {BG_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
+    border-radius: 6px;
+    selection-background-color: rgba(71, 127, 168, 0.35);
+    selection-color: {TEXT_PRIMARY};
+}}
+
+QHeaderView::section {{
+    background-color: {BG_SECONDARY};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_COLOR};
+    padding: 5px 8px;
+    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+}}
+
+QTableCornerButton::section {{
+    background-color: {BG_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
+}}
+
+/* Bottom Status Bar (Anchors the #080B10 dark gradient base) */
 QStatusBar {{
-    background-color: {BG_PRIMARY};
+    background-color: {BG_BOTTOM_DARK};
     border-top: 1px solid {BORDER_COLOR};
     color: {TEXT_SECONDARY};
     font-size: 10px;
-    padding: 2px 8px;
+    padding: 2px 10px;
 }}
 
-/* Scroll Area */
+/* Scroll Area & ScrollBars */
 QScrollArea {{
     background-color: transparent;
     border: none;
 }}
 
-QScrollBar:vertical {{
-    background-color: {BG_PRIMARY};
+QScrollBar:vertical, QScrollBar:horizontal {{
+    background-color: {BG_MAIN};
     width: 6px;
+    height: 6px;
     margin: 0;
 }}
 
-QScrollBar::handle:vertical {{
-    background-color: {BORDER_ACCENT};
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+    background-color: {BG_ADJUSTMENT};
     border-radius: 3px;
     min-height: 20px;
+    min-width: 20px;
 }}
 
-QScrollBar::handle:vertical:hover {{
-    background-color: {ACCENT_PURPLE};
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
+    background-color: {ACCENT_BLUE};
 }}
 
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     height: 0px;
+    width: 0px;
 }}
 
-/* Research & Experiments Workspace (Graphite / Slate Design) */
+QDialog, QMessageBox {{
+    background-color: {BG_SECONDARY};
+    color: {TEXT_PRIMARY};
+}}
+
+/* Research & Experiments Workspace (Unified Graphite / Slate Design) */
 QWidget#experimentsView {{
-    background-color: {SLATE_BG};
+    background-color: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:0, y2:1,
+        stop:0.00 {BG_WORKSPACE},
+        stop:0.78 {BG_MAIN},
+        stop:1.00 {BG_BOTTOM_DARK}
+    );
     color: {TEXT_PRIMARY};
     font-family: "CODE Regular", "Fira Code", "JetBrains Mono", "Segoe UI", sans-serif;
 }}
 QWidget#experimentsView QFrame.expPanel {{
-    background-color: {SLATE_PANEL};
-    border: 1px solid {SLATE_SURFACE};
+    background-color: {BG_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
     border-radius: 8px;
 }}
 QWidget#experimentsView QFrame.expSurface {{
-    background-color: {SLATE_SURFACE};
-    border: 1px solid #4a5a68;
+    background-color: {BG_ADJUSTMENT};
+    border: 1px solid {BORDER_COLOR};
     border-radius: 6px;
 }}
 QWidget#experimentsView QFrame.categoryCard {{
-    background-color: {SLATE_PANEL};
-    border: 1px solid {SLATE_SURFACE};
+    background-color: {BG_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
     border-radius: 10px;
 }}
 QWidget#experimentsView QFrame.categoryCard:hover {{
-    border: 1px solid {SLATE_ACCENT};
-    background-color: #2f3b46;
+    border: 1px solid {ACCENT_BLUE};
+    background-color: {BG_CONTROL};
 }}
 QWidget#experimentsView QPushButton.expBtn {{
-    background-color: {SLATE_SURFACE};
+    background-color: {BG_ADJUSTMENT};
     color: {TEXT_PRIMARY};
-    border: 1px solid #4c5c6b;
+    border: 1px solid {BORDER_COLOR};
     border-radius: 6px;
     padding: 5px 12px;
     font-family: "CODE Bold", "Fira Code", "JetBrains Mono", sans-serif;
@@ -815,14 +1126,14 @@ QWidget#experimentsView QPushButton.expBtn {{
     font-weight: 700;
 }}
 QWidget#experimentsView QPushButton.expBtn:hover {{
-    border: 1px solid {SLATE_ACCENT};
-    background-color: #435260;
+    border: 1px solid {ACCENT_BLUE};
+    background-color: {BG_CONTROL};
 }}
 QWidget#experimentsView QPushButton.expBtn:checked,
 QWidget#experimentsView QPushButton.expPrimaryBtn {{
-    background-color: {SLATE_ACCENT};
+    background-color: {ACCENT_BLUE};
     color: #ffffff;
-    border: 1px solid {SLATE_ACCENT_LIGHT};
+    border: 1px solid {ACCENT_BLUE_LIGHT};
     font-family: "CODE Bold", "Fira Code", "JetBrains Mono", sans-serif;
     font-size: 10px;
     font-weight: 700;
@@ -830,56 +1141,39 @@ QWidget#experimentsView QPushButton.expPrimaryBtn {{
     padding: 5px 12px;
 }}
 QWidget#experimentsView QPushButton.expPrimaryBtn:hover {{
-    background-color: #548eba;
+    background-color: {ACCENT_BLUE_LIGHT};
 }}
 QWidget#experimentsView QPushButton.expSegBtn {{
-    background-color: {SLATE_PANEL};
-    color: #cbd5e1;
-    border: 1px solid {SLATE_SURFACE};
+    background-color: {BG_SECONDARY};
+    color: {TEXT_SECONDARY};
+    border: 1px solid {BORDER_COLOR};
     border-radius: 6px;
     padding: 5px 12px;
     font-size: 10px;
     font-weight: 600;
 }}
 QWidget#experimentsView QPushButton.expSegBtn:hover {{
-    border: 1px solid {SLATE_ACCENT};
-    color: #ffffff;
+    border: 1px solid {ACCENT_BLUE};
+    color: {TEXT_PRIMARY};
 }}
 QWidget#experimentsView QPushButton.expSegBtn:checked {{
-    background-color: {SLATE_ACCENT};
+    background-color: {ACCENT_BLUE};
     color: #ffffff;
-    border: 1px solid {SLATE_ACCENT_LIGHT};
+    border: 1px solid {ACCENT_BLUE_LIGHT};
 }}
 QWidget#experimentsView QComboBox,
 QWidget#experimentsView QSpinBox,
 QWidget#experimentsView QLineEdit {{
-    background-color: {SLATE_SURFACE};
+    background-color: {BG_CONTROL};
     color: {TEXT_PRIMARY};
-    border: 1px solid #4c5c6b;
+    border: 1px solid {BORDER_COLOR};
     border-radius: 5px;
     padding: 4px 8px;
 }}
-QWidget#experimentsView QTableWidget {{
-    background-color: {SLATE_BG};
-    alternate-background-color: #161d24;
-    color: #e2e8f0;
-    gridline-color: {SLATE_PANEL};
-    border: 1px solid {SLATE_SURFACE};
-    border-radius: 6px;
-}}
-QWidget#experimentsView QHeaderView::section {{
-    background-color: {SLATE_PANEL};
-    color: {TEXT_PRIMARY};
-    border: 1px solid {SLATE_SURFACE};
-    padding: 5px 8px;
-    font-family: "CODE Bold", "Fira Code", "JetBrains Mono", sans-serif;
-    font-size: 9px;
-    font-weight: 700;
-}}
 QWidget#experimentsView QPlainTextEdit {{
-    background-color: {SLATE_BG};
-    color: #cbd5e1;
-    border: 1px solid {SLATE_SURFACE};
+    background-color: {BG_MAIN};
+    color: {TEXT_PRIMARY};
+    border: 1px solid {BORDER_COLOR};
     border-radius: 6px;
     font-family: "CODE Regular", "Fira Code", "JetBrains Mono", monospace;
     font-size: 9px;
@@ -895,6 +1189,8 @@ class SplitImageViewer(QWidget):
     Renders Before/After comparison with interactive split slider,
     smooth zoom/pan, dimension badge, and original vs enhanced badges.
     """
+    zoom_changed = Signal(float)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
@@ -941,16 +1237,19 @@ class SplitImageViewer(QWidget):
 
     def zoom_in(self) -> None:
         self._zoom = min(self._zoom * 1.25, 8.0)
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def zoom_out(self) -> None:
         self._zoom = max(self._zoom / 1.25, 0.2)
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def reset_zoom(self) -> None:
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
         self._split_ratio = 0.5
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def fit_to_screen(self) -> None:
@@ -964,6 +1263,7 @@ class SplitImageViewer(QWidget):
         h_ratio = available_h / max(1, self._original_pixmap.height())
         self._zoom = max(0.1, min(w_ratio, h_ratio))
         self._pan = QPointF(0, 0)
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
@@ -988,13 +1288,15 @@ class SplitImageViewer(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-        # Background canvas
-        painter.fillRect(self.rect(), QColor(BG_PRIMARY))
+        # Near-black canvas with restrained subtle border
+        painter.fillRect(self.rect(), QColor(BG_MAIN))
 
         if not self._original_pixmap or self._original_pixmap.isNull():
             painter.setPen(QColor(TEXT_MUTED))
-            painter.setFont(QFont("sans-serif", 12))
+            painter.setFont(studio_font(self, point_size=11, bold=False))
             painter.drawText(self.rect(), Qt.AlignCenter, "No image loaded.\nClick 'Open Image...' to begin.")
+            painter.setPen(QPen(QColor(BORDER_COLOR), 1))
+            painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 6, 6)
             return
 
         img_rect = self._get_image_rect()
@@ -1005,7 +1307,6 @@ class SplitImageViewer(QWidget):
         elif self._split_mode == "enhanced":
             painter.drawPixmap(img_rect.toRect(), self._enhanced_pixmap)
         else:
-            # Interactive split mode
             split_x = img_rect.left() + img_rect.width() * self._split_ratio
 
             # 1. Draw Original on left side
@@ -1022,61 +1323,66 @@ class SplitImageViewer(QWidget):
             painter.drawPixmap(img_rect.toRect(), self._enhanced_pixmap)
             painter.restore()
 
-            # 3. Draw Split Line
-            line_pen = QPen(QColor("#ffffff"), 2)
+            # 3. Draw Restrained Split Line
+            line_pen = QPen(QColor(TEXT_PRIMARY), 1.5)
             painter.setPen(line_pen)
             painter.drawLine(int(split_x), int(img_rect.top()), int(split_x), int(img_rect.bottom()))
 
-            # 4. Draw Draggable Handle circle < | >
+            # 4. Draw Draggable Handle circle (graphite fill, muted blue border)
             handle_y = img_rect.center().y()
-            handle_r = 18
+            handle_r = 16
             handle_rect = QRectF(split_x - handle_r, handle_y - handle_r, handle_r * 2, handle_r * 2)
 
-            painter.setBrush(QColor(BG_PRIMARY))
-            handle_border_pen = QPen(QColor(ACCENT_PURPLE), 2)
+            painter.setBrush(QColor(BG_WORKSPACE))
+            handle_border_pen = QPen(QColor(ACCENT_BLUE), 1.8)
             painter.setPen(handle_border_pen)
             painter.drawEllipse(handle_rect)
 
-            painter.setPen(QColor("#ffffff"))
-            painter.setFont(QFont("sans-serif", 9, QFont.Bold))
+            painter.setPen(QColor(TEXT_PRIMARY))
+            painter.setFont(studio_font(self, point_size=8, bold=True))
             painter.drawText(handle_rect, Qt.AlignCenter, "⟨ | ⟩")
 
-        # 5. Badges Overlay
-        badge_font = QFont("sans-serif", 9, QFont.DemiBold)
-        painter.setFont(badge_font)
+        # Subtle border framing rendered image & canvas
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(BORDER_COLOR), 1))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 6, 6)
+
+        # 5. Overlay Badges (Restrained graphite / muted blue tint)
+        painter.setFont(studio_font(self, point_size=8, bold=True))
 
         badge_y = max(14.0, img_rect.top() + 14) if img_rect.height() >= 120 else 14.0
         badge_x_left = max(14.0, img_rect.left() + 14) if img_rect.width() >= 260 else 14.0
 
         # Original badge (Left)
-        badge_orig_rect = QRectF(badge_x_left, badge_y, 118, 24)
-        painter.setBrush(QColor(20, 22, 35, 210))
+        badge_orig_rect = QRectF(badge_x_left, badge_y, 122, 23)
+        painter.setBrush(QColor(21, 27, 35, 220))
         painter.setPen(QPen(QColor(BORDER_COLOR), 1))
-        painter.drawRoundedRect(badge_orig_rect, 6, 6)
+        painter.drawRoundedRect(badge_orig_rect, 5, 5)
         painter.setPen(QColor(TEXT_PRIMARY))
         painter.drawText(badge_orig_rect, Qt.AlignCenter, "Original (Input)")
 
         # Enhanced badge (Right)
         enhanced_title = f"Enhanced ({self._mode_label})"
-        enh_w = max(140.0, float(len(enhanced_title) * 7.5 + 24))
+        enh_w = max(142.0, float(len(enhanced_title) * 7.2 + 24))
         badge_x_right = min(self.width() - enh_w - 14, img_rect.right() - enh_w - 14) if img_rect.width() >= 260 else self.width() - enh_w - 14
-        badge_enh_rect = QRectF(badge_x_right, badge_y, enh_w, 24)
-        painter.setBrush(QColor(138, 79, 255, 60))
-        painter.setPen(QPen(QColor(ACCENT_PURPLE), 1))
-        painter.drawRoundedRect(badge_enh_rect, 6, 6)
-        painter.setPen(QColor("#ffffff"))
+        badge_enh_rect = QRectF(badge_x_right, badge_y, enh_w, 23)
+        painter.setBrush(QColor(71, 127, 168, 72))
+        painter.setPen(QPen(QColor(ACCENT_BLUE), 1))
+        painter.drawRoundedRect(badge_enh_rect, 5, 5)
+        painter.setPen(QColor(TEXT_PRIMARY))
         painter.drawText(badge_enh_rect, Qt.AlignCenter, enhanced_title)
 
         # Dimension Badge (Bottom Right)
         dim_text = f"{self._img_width} × {self._img_height} | {self._format_label}"
-        dim_x = min(self.width() - 174, img_rect.right() - 174) if img_rect.width() >= 260 else self.width() - 174
+        dim_w = max(160.0, float(len(dim_text) * 6.4 + 22))
+        dim_x = min(self.width() - dim_w - 14, img_rect.right() - dim_w - 14) if img_rect.width() >= 260 else self.width() - dim_w - 14
         dim_y = min(self.height() - 34, img_rect.bottom() - 32) if img_rect.height() >= 120 else self.height() - 34
-        dim_rect = QRectF(dim_x, dim_y, 160, 22)
-        painter.setBrush(QColor(20, 22, 35, 190))
+        dim_rect = QRectF(dim_x, dim_y, dim_w, 22)
+        painter.setBrush(QColor(21, 27, 35, 210))
         painter.setPen(QPen(QColor(BORDER_COLOR), 1))
         painter.drawRoundedRect(dim_rect, 4, 4)
         painter.setPen(QColor(TEXT_SECONDARY))
-        painter.setFont(QFont("sans-serif", 8))
+        painter.setFont(studio_font(self, point_size=7, bold=False))
         painter.drawText(dim_rect, Qt.AlignCenter, dim_text)
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
@@ -1106,7 +1412,6 @@ class SplitImageViewer(QWidget):
             self._pan += delta
             self.update()
         else:
-            # Check cursor hover
             img_rect = self._get_image_rect()
             if img_rect.width() > 0:
                 split_x = img_rect.left() + img_rect.width() * self._split_ratio
@@ -1126,12 +1431,12 @@ class SplitImageViewer(QWidget):
         factor = 1.15 ** steps
         new_zoom = max(0.1, min(10.0, self._zoom * factor))
 
-        # Zoom centering towards mouse cursor
         mouse_pos = event.position()
         center = QPointF(self.width() / 2.0 + self._pan.x(), self.height() / 2.0 + self._pan.y())
         diff = mouse_pos - center
         self._pan += diff * (1.0 - new_zoom / self._zoom)
         self._zoom = new_zoom
+        self.zoom_changed.emit(self._zoom)
         self.update()
 
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:
@@ -1139,15 +1444,17 @@ class SplitImageViewer(QWidget):
 
 
 # ---------------------------------------------------------------------------
-# Custom Widget 2: Donut Chart for Tile Allocation
+# Custom Widget 2: Responsive Enlarged Donut Chart for Tile Allocation
 # ---------------------------------------------------------------------------
 class DonutChartWidget(QWidget):
     """
-    Vector-painted donut chart displaying FP32 and FP16 tile allocation.
+    Vector-painted donut chart displaying FP32 (#527FA6) and FP16 (#35A879) tile allocation.
+    Places legend underneath or beside the enlarged donut depending on available width.
     """
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, hole_bg: str = BG_SUBCARD):
         super().__init__(parent)
-        self.setMinimumSize(220, 110)
+        self.setMinimumSize(170, 122)
+        self._hole_bg: str = hole_bg
         self._total_tiles: int = 0
         self._fp32_count: int = 0
         self._fp16_count: int = 0
@@ -1169,78 +1476,105 @@ class DonutChartWidget(QWidget):
         w = self.width()
         h = self.height()
 
-        donut_center_x = 36
-        donut_center_y = h / 2
-        radius_outer = 32
-        radius_inner = 20
+        side_by_side = w >= 260
+        if side_by_side:
+            radius_outer = min(35.0, max(24.0, (h - 14.0) / 2.0))
+            donut_center_x = radius_outer + 10.0
+            donut_center_y = h / 2.0
+        else:
+            legend_reserve = 34.0
+            avail_h = max(60.0, h - legend_reserve)
+            radius_outer = min(38.0, max(27.0, min(w - 16.0, avail_h - 6.0) / 2.0))
+            donut_center_x = w / 2.0
+            donut_center_y = avail_h / 2.0
 
-        rect_outer = QRectF(donut_center_x - radius_outer, donut_center_y - radius_outer, radius_outer * 2, radius_outer * 2)
+        radius_inner = radius_outer * 0.62
+        rect_outer = QRectF(
+            donut_center_x - radius_outer,
+            donut_center_y - radius_outer,
+            radius_outer * 2.0,
+            radius_outer * 2.0,
+        )
+        rect_inner = QRectF(
+            donut_center_x - radius_inner,
+            donut_center_y - radius_inner,
+            radius_inner * 2.0,
+            radius_inner * 2.0,
+        )
 
         if self._total_tiles == 0:
-            # Draw neutral placeholder
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(BORDER_COLOR))
             painter.drawEllipse(rect_outer)
-            painter.setBrush(QColor(BG_SURFACE))
-            painter.drawEllipse(QRectF(donut_center_x - radius_inner, donut_center_y - radius_inner, radius_inner * 2, radius_inner * 2))
+            painter.setBrush(QColor(self._hole_bg))
+            painter.drawEllipse(rect_inner)
 
             painter.setPen(QColor(TEXT_MUTED))
-            painter.setFont(QFont("sans-serif", 8))
-            painter.drawText(rect_outer, Qt.AlignCenter, "--\nTiles")
+            painter.setFont(studio_font(self, point_size=8, bold=False))
+            painter.drawText(rect_inner, Qt.AlignCenter, "--\nTiles")
+
+            if not side_by_side:
+                leg_font = studio_font(self, point_size=7, bold=False)
+                painter.setFont(leg_font)
+                painter.setPen(QColor(TEXT_MUTED))
+                painter.drawText(QRectF(4, h - 32, w - 8, 14), Qt.AlignCenter, "FP32: --   |   FP16: --")
             return
 
-        # Calculate angles (in 16ths of a degree)
         start_angle = 90 * 16
         fp32_span = int(-self._fp32_pct / 100.0 * 360 * 16)
         fp16_span = int(-self._fp16_pct / 100.0 * 360 * 16)
 
-        # Draw FP32 slice (Blue)
         if self._fp32_count > 0:
             painter.setBrush(QColor(ACCENT_BLUE))
             painter.setPen(Qt.NoPen)
             painter.drawPie(rect_outer, start_angle, fp32_span)
 
-        # Draw FP16 slice (Green)
         if self._fp16_count > 0:
             painter.setBrush(QColor(ACCENT_GREEN))
             painter.setPen(Qt.NoPen)
             painter.drawPie(rect_outer, start_angle + fp32_span, fp16_span)
 
-        # Draw Inner Hole to make donut
-        painter.setBrush(QColor(BG_SURFACE))
+        painter.setBrush(QColor(self._hole_bg))
         painter.setPen(Qt.NoPen)
-        rect_inner = QRectF(donut_center_x - radius_inner, donut_center_y - radius_inner, radius_inner * 2, radius_inner * 2)
         painter.drawEllipse(rect_inner)
 
-        # Center Text
         painter.setPen(QColor(TEXT_PRIMARY))
-        painter.setFont(QFont("sans-serif", 10, QFont.Bold))
-        text_rect = QRectF(donut_center_x - radius_inner, donut_center_y - 12, radius_inner * 2, 13)
+        painter.setFont(studio_font(self, point_size=10, bold=True))
+        text_rect = QRectF(donut_center_x - radius_inner, donut_center_y - 13, radius_inner * 2, 15)
         painter.drawText(text_rect, Qt.AlignCenter, str(self._total_tiles))
 
         painter.setPen(QColor(TEXT_SECONDARY))
-        painter.setFont(QFont("sans-serif", 6, QFont.Medium))
-        sub_rect = QRectF(donut_center_x - radius_inner, donut_center_y + 1, radius_inner * 2, 10)
+        painter.setFont(studio_font(self, point_size=7, bold=False))
+        sub_rect = QRectF(donut_center_x - radius_inner, donut_center_y + 2, radius_inner * 2, 11)
         painter.drawText(sub_rect, Qt.AlignCenter, "Tiles")
 
-        # Right Legend
-        legend_x = 76
+        leg_font = studio_font(self, point_size=7, bold=False)
+        painter.setFont(leg_font)
         box_size = 7
+        fp32_str = f"FP32: {self._fp32_count} ({self._fp32_pct:.1f}%)"
+        fp16_str = f"FP16: {self._fp16_count} ({self._fp16_pct:.1f}%)"
 
-        # FP32 Legend
-        painter.fillRect(legend_x, int(donut_center_y - 16), box_size, box_size, QColor(ACCENT_BLUE))
-        painter.setPen(QColor(TEXT_PRIMARY))
-        painter.setFont(QFont("sans-serif", 7, QFont.DemiBold))
-        painter.drawText(legend_x + 11, int(donut_center_y - 9), f"FP32: {self._fp32_count} ({self._fp32_pct:.1f}%)")
-
-        # FP16 Legend
-        painter.fillRect(legend_x, int(donut_center_y + 4), box_size, box_size, QColor(ACCENT_GREEN))
-        painter.setPen(QColor(TEXT_PRIMARY))
-        painter.drawText(legend_x + 11, int(donut_center_y + 11), f"FP16: {self._fp16_count} ({self._fp16_pct:.1f}%)")
+        if side_by_side:
+            legend_x = int(donut_center_x + radius_outer + 14)
+            leg_w = max(90.0, float(w - legend_x - 8))
+            painter.fillRect(legend_x, int(donut_center_y - 15), box_size, box_size, QColor(ACCENT_BLUE))
+            painter.setPen(QColor(TEXT_PRIMARY))
+            painter.drawText(QRectF(legend_x + 12, donut_center_y - 19, leg_w, 15), Qt.AlignLeft | Qt.AlignVCenter, fp32_str)
+            painter.fillRect(legend_x, int(donut_center_y + 5), box_size, box_size, QColor(ACCENT_GREEN))
+            painter.drawText(QRectF(legend_x + 12, donut_center_y + 1, leg_w, 15), Qt.AlignLeft | Qt.AlignVCenter, fp16_str)
+        else:
+            y1 = int(h - 32)
+            y2 = int(h - 16)
+            lx = max(6, int((w - 152) / 2))
+            painter.fillRect(lx, y1 + 4, box_size, box_size, QColor(ACCENT_BLUE))
+            painter.setPen(QColor(TEXT_PRIMARY))
+            painter.drawText(QRectF(lx + 11, y1, w - lx - 14, 15), Qt.AlignLeft | Qt.AlignVCenter, fp32_str)
+            painter.fillRect(lx, y2 + 4, box_size, box_size, QColor(ACCENT_GREEN))
+            painter.drawText(QRectF(lx + 11, y2, w - lx - 14, 15), Qt.AlignLeft | Qt.AlignVCenter, fp16_str)
 
 
 # ---------------------------------------------------------------------------
-# Custom Widget 3: Performance Bar Chart (Measured Hardware Runtimes)
+# Custom Widget 3: Compact Performance Bar Chart (Measured Hardware Runtimes)
 # ---------------------------------------------------------------------------
 class PerformanceBarChart(QWidget):
     """
@@ -1249,7 +1583,7 @@ class PerformanceBarChart(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(220, 110)
+        self.setMinimumSize(180, 88)
         self._fp32_ms: Optional[float] = None
         self._fp16_ms: Optional[float] = None
         self._adaptive_ms: Optional[float] = None
@@ -1269,15 +1603,14 @@ class PerformanceBarChart(QWidget):
         w = self.width()
         h = self.height()
 
-        left_margin = 56
-        right_margin = 10
-        chart_w = w - left_margin - right_margin
-        top_margin = 12
+        left_margin = 52
+        right_margin = 8
+        chart_w = max(40.0, float(w - left_margin - right_margin))
+        top_margin = max(4.0, (h - 70.0) / 2.0)
 
-        # Max scale
         valid_vals = [v for v in [self._fp32_ms, self._fp16_ms, self._adaptive_ms] if v is not None and v > 0]
         max_val = max(valid_vals) if valid_vals else 800.0
-        max_scale = max(800.0, math.ceil(max_val / 200.0) * 200.0)
+        max_scale = max(200.0, math.ceil(max_val / 200.0) * 200.0) if valid_vals else 800.0
 
         bars = [
             ("FP32", self._fp32_ms),
@@ -1285,48 +1618,44 @@ class PerformanceBarChart(QWidget):
             ("Adaptive", self._adaptive_ms),
         ]
 
-        bar_h = 14
-        row_gap = 24
+        bar_h = 13
+        row_gap = 18
 
         for i, (label, val) in enumerate(bars):
             y = top_margin + i * row_gap
 
-            # Label
             painter.setPen(QColor(TEXT_SECONDARY))
-            painter.setFont(QFont("sans-serif", 8, QFont.Medium))
-            painter.drawText(QRectF(4, y - 1, left_margin - 8, bar_h + 2), Qt.AlignRight | Qt.AlignVCenter, label)
+            painter.setFont(studio_font(self, point_size=7, bold=False))
+            painter.drawText(QRectF(0, y - 1, left_margin - 6, bar_h + 2), Qt.AlignRight | Qt.AlignVCenter, label)
 
-            # Bar track
             track_rect = QRectF(left_margin, y, chart_w, bar_h)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(BG_INPUT))
+            painter.setPen(QPen(QColor(BORDER_COLOR), 1))
+            painter.setBrush(QColor(BG_WORKSPACE))
             painter.drawRoundedRect(track_rect, 3, 3)
 
-            # Bar fill
             if val is not None and val > 0:
                 bar_len = max(4.0, min(chart_w, (val / max_scale) * chart_w))
                 bar_rect = QRectF(left_margin, y, bar_len, bar_h)
 
                 grad = QLinearGradient(left_margin, y, left_margin + bar_len, y)
-                grad.setColorAt(0, QColor(ACCENT_PURPLE))
-                grad.setColorAt(1, QColor(ACCENT_PURPLE_LIGHT))
+                grad.setColorAt(0, QColor(SLIDER_ACTIVE))
+                grad.setColorAt(1, QColor(ACCENT_BLUE_LIGHT))
+                painter.setPen(Qt.NoPen)
                 painter.setBrush(grad)
                 painter.drawRoundedRect(bar_rect, 3, 3)
 
-                # Value text
                 painter.setPen(QColor(TEXT_PRIMARY))
-                painter.setFont(QFont("sans-serif", 7, QFont.Bold))
+                painter.setFont(studio_font(self, point_size=7, bold=True))
                 val_text = f"{val:.2f} ms"
-                if bar_len > 60:
-                    painter.drawText(bar_rect.adjusted(0, 0, -6, 0), Qt.AlignRight | Qt.AlignVCenter, val_text)
+                if bar_len > 62:
+                    painter.drawText(bar_rect.adjusted(0, 0, -5, 0), Qt.AlignRight | Qt.AlignVCenter, val_text)
                 else:
-                    painter.drawText(QRectF(left_margin + bar_len + 4, y, 60, bar_h), Qt.AlignLeft | Qt.AlignVCenter, val_text)
+                    painter.drawText(QRectF(left_margin + bar_len + 5, y, 65, bar_h), Qt.AlignLeft | Qt.AlignVCenter, val_text)
             else:
                 painter.setPen(QColor(TEXT_MUTED))
-                painter.setFont(QFont("sans-serif", 7))
+                painter.setFont(studio_font(self, point_size=7, bold=False))
                 painter.drawText(track_rect, Qt.AlignCenter, "Not measured")
 
-        # X-Axis ticks
         axis_y = top_margin + len(bars) * row_gap + 4
         painter.setPen(QPen(QColor(BORDER_COLOR), 1))
         painter.drawLine(left_margin, int(axis_y), left_margin + int(chart_w), int(axis_y))
@@ -1334,19 +1663,20 @@ class PerformanceBarChart(QWidget):
         tick_steps = [0, int(max_scale * 0.25), int(max_scale * 0.5), int(max_scale * 0.75), int(max_scale)]
         for t in tick_steps:
             tx = left_margin + (t / max_scale) * chart_w
+            painter.setPen(QPen(QColor(BORDER_COLOR), 1))
             painter.drawLine(int(tx), int(axis_y), int(tx), int(axis_y + 3))
             painter.setPen(QColor(TEXT_MUTED))
-            painter.setFont(QFont("sans-serif", 6))
+            painter.setFont(studio_font(self, point_size=6, bold=False))
             painter.drawText(QRectF(tx - 15, axis_y + 4, 30, 10), Qt.AlignCenter, str(t))
 
 
 # ---------------------------------------------------------------------------
-# Custom Widget 4: Heatmap and Analysis Overlay Viewer
+# Custom Widget 4: Heatmap, Precision Map, Difference & Histogram Viewer
 # ---------------------------------------------------------------------------
 class HeatmapOverlayViewer(QWidget):
     """
     Displays sensitivity heatmap (TURBO colormap), tile precision map,
-    difference map, and RGB histogram.
+    real pixel difference map, and real RGB histogram.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1356,19 +1686,129 @@ class HeatmapOverlayViewer(QWidget):
         self._heatmap_pixmap: Optional[QPixmap] = None
         self._precision_pixmap: Optional[QPixmap] = None
         self._difference_pixmap: Optional[QPixmap] = None
+        self._hist_bins: Optional[Tuple[List[float], List[float], List[float]]] = None
+        self._source_orig_path: str = ""
+        self._source_enh_path: str = ""
 
-    def set_overlay_images(self, heatmap_path: str, precision_path: str, diff_path: str = "") -> None:
-        if heatmap_path and os.path.exists(heatmap_path):
-            self._heatmap_pixmap = QPixmap(heatmap_path)
-        if precision_path and os.path.exists(precision_path):
-            self._precision_pixmap = QPixmap(precision_path)
+    def set_source_images(self, original_path: str, enhanced_path: str = "") -> None:
+        self._source_orig_path = original_path
+        self._source_enh_path = enhanced_path
+        target_hist_path = enhanced_path if (enhanced_path and os.path.exists(enhanced_path)) else original_path
+        self._compute_histogram(target_hist_path)
+        self._compute_difference_map(original_path, enhanced_path)
+        self.update()
+
+    def set_overlay_images(
+        self,
+        heatmap_path: str,
+        precision_path: str,
+        diff_path: str = "",
+        original_path: str = "",
+        enhanced_path: str = "",
+    ) -> None:
+        self._heatmap_pixmap = QPixmap(heatmap_path) if (heatmap_path and os.path.exists(heatmap_path)) else None
+        self._precision_pixmap = QPixmap(precision_path) if (precision_path and os.path.exists(precision_path)) else None
         if diff_path and os.path.exists(diff_path):
             self._difference_pixmap = QPixmap(diff_path)
+        if original_path or enhanced_path:
+            self.set_source_images(original_path or self._source_orig_path, enhanced_path or self._source_enh_path)
         self.update()
+
+    def _compute_difference_map(self, original_path: str, enhanced_path: str) -> None:
+        if not original_path or not enhanced_path or original_path == enhanced_path:
+            self._difference_pixmap = None
+            return
+        if not os.path.exists(original_path) or not os.path.exists(enhanced_path) or np is None:
+            return
+        img_a = QtGui.QImage(original_path).convertToFormat(QtGui.QImage.Format_RGB888)
+        img_b = QtGui.QImage(enhanced_path).convertToFormat(QtGui.QImage.Format_RGB888)
+        if img_a.isNull() or img_b.isNull() or img_a.size() != img_b.size():
+            return
+        w, h = img_a.width(), img_a.height()
+        bpl_a = img_a.bytesPerLine()
+        bpl_b = img_b.bytesPerLine()
+        arr_a = np.frombuffer(img_a.constBits(), dtype=np.uint8).reshape((h, bpl_a))[:, : w * 3].reshape((h, w, 3))
+        arr_b = np.frombuffer(img_b.constBits(), dtype=np.uint8).reshape((h, bpl_b))[:, : w * 3].reshape((h, w, 3))
+        diff = np.clip(np.abs(arr_b.astype(np.int16) - arr_a.astype(np.int16)) * 4, 0, 255).astype(np.uint8)
+        diff_contig = np.ascontiguousarray(diff)
+        qimg = QtGui.QImage(diff_contig.data, w, h, w * 3, QtGui.QImage.Format_RGB888).copy()
+        self._difference_pixmap = QPixmap.fromImage(qimg)
+
+    def _compute_histogram(self, img_path: str) -> None:
+        if not img_path or not os.path.exists(img_path) or np is None:
+            self._hist_bins = None
+            return
+        qimg = QtGui.QImage(img_path).convertToFormat(QtGui.QImage.Format_RGB888)
+        if qimg.isNull():
+            self._hist_bins = None
+            return
+        w, h = qimg.width(), qimg.height()
+        bpl = qimg.bytesPerLine()
+        arr = np.frombuffer(qimg.constBits(), dtype=np.uint8).reshape((h, bpl))[:, : w * 3].reshape((-1, 3))
+        bins = []
+        for ch in range(3):
+            hist, _ = np.histogram(arr[:, ch], bins=64, range=(0, 256))
+            peak = float(hist.max()) if hist.size and hist.max() > 0 else 1.0
+            bins.append((hist / peak).tolist())
+        self._hist_bins = (bins[0], bins[1], bins[2])
 
     def set_active_tab(self, tab_name: str) -> None:
         self._current_tab = tab_name
         self.update()
+
+    def _paint_histogram(self, painter: QPainter, rect: QRectF) -> None:
+        painter.fillRect(rect, QColor(BG_MAIN))
+        painter.setPen(QPen(QColor(BORDER_COLOR), 1))
+        painter.drawRoundedRect(rect.adjusted(0, 0, -1, -1), 4, 4)
+
+        if not self._hist_bins:
+            painter.setPen(QColor(TEXT_MUTED))
+            painter.setFont(studio_font(self, point_size=8, bold=False))
+            painter.drawText(rect, Qt.AlignCenter, "Histogram\n(Load an image to inspect)")
+            return
+
+        pad_x, pad_top, pad_bot = 12.0, 16.0, 14.0
+        plot_w = max(20.0, rect.width() - pad_x * 2.0)
+        plot_h = max(20.0, rect.height() - pad_top - pad_bot)
+        ox = rect.left() + pad_x
+        oy = rect.top() + pad_top
+
+        # Subtle gridlines
+        painter.setPen(QPen(QColor("#202933"), 1))
+        for frac in (0.25, 0.5, 0.75, 1.0):
+            gy = oy + plot_h * (1.0 - frac)
+            painter.drawLine(int(ox), int(gy), int(ox + plot_w), int(gy))
+
+        colors = [
+            (self._hist_bins[0], QColor("#D15B5B"), QColor(209, 91, 91, 45)),
+            (self._hist_bins[1], QColor(ACCENT_GREEN), QColor(53, 168, 121, 45)),
+            (self._hist_bins[2], QColor(ACCENT_BLUE_LIGHT), QColor(92, 150, 194, 45)),
+        ]
+        n = len(self._hist_bins[0])
+        for series, line_col, fill_col in colors:
+            poly = QPolygonF()
+            poly.append(QPointF(ox, oy + plot_h))
+            for i, val in enumerate(series):
+                px = ox + (i / max(1, n - 1)) * plot_w
+                py = oy + plot_h - val * plot_h
+                poly.append(QPointF(px, py))
+            poly.append(QPointF(ox + plot_w, oy + plot_h))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(fill_col)
+            painter.drawPolygon(poly)
+
+            painter.setPen(QPen(line_col, 1.3))
+            for i in range(n - 1):
+                x1 = ox + (i / max(1, n - 1)) * plot_w
+                y1 = oy + plot_h - series[i] * plot_h
+                x2 = ox + ((i + 1) / max(1, n - 1)) * plot_w
+                y2 = oy + plot_h - series[i + 1] * plot_h
+                painter.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+
+        src_tag = "Enhanced RGB" if (self._source_enh_path and self._source_enh_path != self._source_orig_path) else "Input RGB"
+        painter.setPen(QColor(TEXT_MUTED))
+        painter.setFont(studio_font(self, point_size=7, bold=False))
+        painter.drawText(QRectF(ox, rect.top() + 2, plot_w, 12), Qt.AlignRight | Qt.AlignVCenter, src_tag)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         painter = QPainter(self)
@@ -1377,6 +1817,12 @@ class HeatmapOverlayViewer(QWidget):
 
         w = self.width()
         h = self.height()
+
+        if self._current_tab == "Histogram":
+            self._paint_histogram(painter, QRectF(0, 0, w, h))
+            return
+
+        painter.fillRect(self.rect(), QColor(BG_MAIN))
 
         active_pixmap = None
         if self._current_tab == "Sensitivity":
@@ -1387,22 +1833,27 @@ class HeatmapOverlayViewer(QWidget):
             active_pixmap = self._difference_pixmap
 
         if active_pixmap and not active_pixmap.isNull():
-            # Reserve 28px on right for TURBO colorbar if Sensitivity
-            img_w = w - (32 if self._current_tab == "Sensitivity" else 0)
-            target_rect = QRectF(0, 0, img_w, h)
-            scaled = active_pixmap.scaled(int(img_w), int(h), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            draw_x = (img_w - scaled.width()) / 2
-            draw_y = (h - scaled.height()) / 2
+            img_w = w - (32 if self._current_tab == "Sensitivity" else 8)
+            avail_h = max(10, h - 8)
+            scaled = active_pixmap.scaled(int(img_w), int(avail_h), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            draw_x = 4 + (img_w - scaled.width()) / 2
+            draw_y = 4 + (avail_h - scaled.height()) / 2
             painter.drawPixmap(int(draw_x), int(draw_y), scaled)
 
-            # Draw TURBO color bar on the right
             if self._current_tab == "Sensitivity":
-                draw_turbo_colorbar(painter, float(w - 24), 10.0, 8.0, float(max(20, h - 20)))
+                draw_turbo_colorbar(painter, float(w - 22), 10.0, 8.0, float(max(20, h - 20)))
+            elif self._current_tab == "Difference":
+                painter.setPen(QColor(TEXT_MUTED))
+                painter.setFont(studio_font(self, point_size=7, bold=False))
+                painter.drawText(QRectF(6, 4, w - 12, 14), Qt.AlignRight | Qt.AlignTop, "4× |Enhanced − Original|")
         else:
-            painter.fillRect(self.rect(), QColor(BG_INPUT))
             painter.setPen(QColor(TEXT_MUTED))
-            painter.setFont(QFont("sans-serif", 8))
+            painter.setFont(studio_font(self, point_size=8, bold=False))
             painter.drawText(self.rect(), Qt.AlignCenter, f"{self._current_tab}\n(Run enhancement to display)")
+
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(BORDER_COLOR), 1))
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 4, 4)
 
 
 # ---------------------------------------------------------------------------
@@ -1416,7 +1867,7 @@ class FilmstripCarousel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(74)
+        self.setFixedHeight(68)
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(6, 4, 6, 4)
@@ -1424,17 +1875,18 @@ class FilmstripCarousel(QWidget):
 
         self._btn_prev = QToolButton(self)
         self._btn_prev.setText("⟨")
-        self._btn_prev.setFixedSize(24, 60)
+        self._btn_prev.setFixedSize(22, 56)
         self._btn_prev.clicked.connect(self._scroll_left)
         main_layout.addWidget(self._btn_prev)
 
         self._scroll_area = QScrollArea(self)
-        self._scroll_area.setFixedHeight(66)
+        self._scroll_area.setFixedHeight(60)
         self._scroll_area.setWidgetResizable(True)
         self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self._container = QWidget()
+        self._container.setObjectName("transparentInner")
         self._container_layout = QHBoxLayout(self._container)
         self._container_layout.setContentsMargins(0, 0, 0, 0)
         self._container_layout.setSpacing(8)
@@ -1443,7 +1895,7 @@ class FilmstripCarousel(QWidget):
 
         self._btn_next = QToolButton(self)
         self._btn_next.setText("⟩")
-        self._btn_next.setFixedSize(24, 60)
+        self._btn_next.setFixedSize(22, 56)
         self._btn_next.clicked.connect(self._scroll_right)
         main_layout.addWidget(self._btn_next)
 
@@ -1459,15 +1911,15 @@ class FilmstripCarousel(QWidget):
         image_files = sorted(list(dataset_dir.glob("*.png")))
         for img_path in image_files:
             btn = QPushButton(self._container)
-            btn.setFixedSize(72, 56)
+            btn.setFixedSize(68, 52)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setProperty("image_path", str(img_path))
 
             pix = QPixmap(str(img_path))
             if not pix.isNull():
-                thumb = pix.scaled(68, 52, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                thumb = pix.scaled(64, 48, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
                 btn.setIcon(QIcon(thumb))
-                btn.setIconSize(QSize(66, 50))
+                btn.setIconSize(QSize(62, 46))
 
             btn.clicked.connect(lambda checked=False, p=str(img_path): self.select_image(p))
             self._container_layout.addWidget(btn)
@@ -1477,9 +1929,9 @@ class FilmstripCarousel(QWidget):
         self._current_path = path
         for card in self._cards:
             if card.property("image_path") == path:
-                card.setStyleSheet(f"border: 2px solid {ACCENT_PURPLE}; border-radius: 6px; background: {BG_SURFACE};")
+                card.setStyleSheet(f"border: 2px solid {ACCENT_BLUE}; border-radius: 5px; background: {BG_SECONDARY}; padding: 0;")
             else:
-                card.setStyleSheet(f"border: 1px solid {BORDER_COLOR}; border-radius: 6px; background: {BG_INPUT};")
+                card.setStyleSheet(f"border: 1px solid {BORDER_COLOR}; border-radius: 5px; background: {BG_MAIN}; padding: 0;")
         self.image_selected.emit(path)
 
     def _scroll_left(self) -> None:
@@ -1869,22 +2321,30 @@ class MirageStudioMainWindow(QMainWindow):
         top_bar = QFrame(self)
         top_bar.setObjectName("topNavBar")
         layout = QHBoxLayout(top_bar)
-        layout.setContentsMargins(16, 6, 16, 6)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 6, 14, 6)
+        layout.setSpacing(10)
 
-        # Brand / Logo
-        brand_layout = QVBoxLayout()
-        brand_layout.setSpacing(2)
-        brand_layout.setContentsMargins(2, 0, 12, 0)
+        # Mirage Geometric Emblem + Brand Title/Subtitle (No "Creative Studio")
+        brand_row = QHBoxLayout()
+        brand_row.setSpacing(10)
+        brand_row.setContentsMargins(0, 0, 12, 0)
+
+        logo_mark = MirageLogoWidget(top_bar)
+        brand_row.addWidget(logo_mark, 0, Qt.AlignVCenter)
+
+        brand_text_col = QVBoxLayout()
+        brand_text_col.setSpacing(1)
+        brand_text_col.setContentsMargins(0, 0, 0, 0)
         lbl_title = QLabel("MIRAGE", self)
         lbl_title.setObjectName("brandTitle")
         lbl_subtitle = QLabel("Adaptive Precision Imaging", self)
         lbl_subtitle.setObjectName("brandSubtitle")
-        brand_layout.addWidget(lbl_title)
-        brand_layout.addWidget(lbl_subtitle)
-        layout.addLayout(brand_layout)
+        brand_text_col.addWidget(lbl_title)
+        brand_text_col.addWidget(lbl_subtitle)
+        brand_row.addLayout(brand_text_col)
+        layout.addLayout(brand_row)
 
-        layout.addSpacing(56)
+        layout.addSpacing(44)
 
         # Nav Tabs
         self._nav_group = QtWidgets.QButtonGroup(self)
@@ -1910,257 +2370,470 @@ class MirageStudioMainWindow(QMainWindow):
 
         layout.addStretch(1)
 
-        # Quick action icons
+        # Restrained monochrome utility actions + Settings + Window controls
         btn_open = QToolButton(self)
-        btn_open.setText("📁")
-        btn_open.setToolTip("Open Image")
+        btn_open.setIcon(create_studio_icon("open", TEXT_SECONDARY, 15))
+        btn_open.setIconSize(QSize(15, 15))
+        btn_open.setFixedSize(28, 28)
+        btn_open.setToolTip("Open Image...")
         btn_open.clicked.connect(self._on_open_image_dialog)
         layout.addWidget(btn_open)
 
         btn_save = QToolButton(self)
-        btn_save.setText("💾")
-        btn_save.setToolTip("Save Result")
+        btn_save.setIcon(create_studio_icon("save", TEXT_SECONDARY, 15))
+        btn_save.setIconSize(QSize(15, 15))
+        btn_save.setFixedSize(28, 28)
+        btn_save.setToolTip("Save Enhanced Result...")
         btn_save.clicked.connect(self._on_save_result_dialog)
         layout.addWidget(btn_save)
 
+        btn_settings = QToolButton(self)
+        btn_settings.setIcon(create_studio_icon("settings", TEXT_SECONDARY, 15))
+        btn_settings.setIconSize(QSize(15, 15))
+        btn_settings.setFixedSize(28, 28)
+        btn_settings.setToolTip("Studio Settings & Diagnostics")
+        btn_settings.clicked.connect(self._on_open_settings_dialog)
+        layout.addWidget(btn_settings)
+
+        divider = QFrame(top_bar)
+        divider.setFixedSize(1, 18)
+        divider.setStyleSheet(f"background-color: {BORDER_COLOR};")
+        layout.addWidget(divider)
+
+        btn_win_min = QToolButton(self)
+        btn_win_min.setIcon(create_studio_icon("win_min", TEXT_SECONDARY, 13))
+        btn_win_min.setIconSize(QSize(13, 13))
+        btn_win_min.setFixedSize(26, 26)
+        btn_win_min.setToolTip("Minimize Window")
+        btn_win_min.clicked.connect(self.showMinimized)
+        layout.addWidget(btn_win_min)
+
+        btn_win_max = QToolButton(self)
+        btn_win_max.setIcon(create_studio_icon("win_max", TEXT_SECONDARY, 13))
+        btn_win_max.setIconSize(QSize(13, 13))
+        btn_win_max.setFixedSize(26, 26)
+        btn_win_max.setToolTip("Maximize / Restore Window")
+        btn_win_max.clicked.connect(self._toggle_maximize_window)
+        layout.addWidget(btn_win_max)
+
+        btn_win_close = QToolButton(self)
+        btn_win_close.setIcon(create_studio_icon("win_close", TEXT_SECONDARY, 13))
+        btn_win_close.setIconSize(QSize(13, 13))
+        btn_win_close.setFixedSize(26, 26)
+        btn_win_close.setToolTip("Close Mirage")
+        btn_win_close.clicked.connect(self.close)
+        layout.addWidget(btn_win_close)
+
         return top_bar
+
+    def _toggle_maximize_window(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
 
     def _create_enhance_view(self) -> QWidget:
         view = QWidget(self)
+        view.setObjectName("workspacePage")
         layout = QHBoxLayout(view)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setContentsMargins(12, 10, 12, 8)
         layout.setSpacing(12)
 
-        # Left Column: Controls (Width ~300)
+        # Left Adjustment Panel (#394651)
         left_col = self._create_left_sidebar()
-        layout.addWidget(left_col)
+        layout.addWidget(left_col, 0)
 
-        # Center Column: Viewer + Toolbar + Carousel
+        # Center Column: Toolbar + Near-black Canvas + Filmstrip Gradient Anchor
         center_col = self._create_center_viewport()
         layout.addWidget(center_col, 1)
 
-        # Right Column: Analytics & Hardware Cards (Width ~320)
+        # Right Column: Graphite/Slate Analytics Panel (#28333D)
         right_col = self._create_right_sidebar()
-        layout.addWidget(right_col)
+        layout.addWidget(right_col, 0)
 
         return view
 
     def _create_left_sidebar(self) -> QWidget:
         panel = QFrame(self)
-        panel.setProperty("class", "panelCard")
-        panel.setFixedWidth(290)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        panel.setObjectName("leftAdjustmentPanel")
+        panel.setMinimumWidth(262)
+        panel.setMaximumWidth(298)
+        panel.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
 
-        # PROJECT Group
-        lbl_proj = QLabel("PROJECT", self)
+        outer_layout = QVBoxLayout(panel)
+        outer_layout.setContentsMargins(8, 8, 8, 8)
+        outer_layout.setSpacing(8)
+
+        scroll = QScrollArea(panel)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        inner = QWidget(scroll)
+        inner.setObjectName("transparentInner")
+        inner.setMinimumWidth(0)
+        layout = QVBoxLayout(inner)
+        layout.setContentsMargins(0, 0, 2, 0)
+        layout.setSpacing(8)
+
+        self._param_controls: Dict[str, Dict] = {}
+
+        # PROJECT Card (#19212A)
+        card_proj = QFrame(inner)
+        card_proj.setProperty("class", "leftCard")
+        proj_layout = QVBoxLayout(card_proj)
+        proj_layout.setContentsMargins(8, 7, 8, 7)
+        proj_layout.setSpacing(5)
+
+        lbl_proj = QLabel("PROJECT", card_proj)
         lbl_proj.setProperty("class", "sectionHeader")
-        layout.addWidget(lbl_proj)
+        proj_layout.addWidget(lbl_proj)
 
-        btn_open_img = QPushButton("📁  Open Image...", self)
+        btn_open_img = QPushButton("  Open Image...", card_proj)
+        btn_open_img.setIcon(create_studio_icon("open", TEXT_PRIMARY, 13))
+        btn_open_img.setIconSize(QSize(13, 13))
         btn_open_img.clicked.connect(self._on_open_image_dialog)
-        layout.addWidget(btn_open_img)
+        proj_layout.addWidget(btn_open_img)
 
-        btn_save_res = QPushButton("💾  Save Result...", self)
+        btn_save_res = QPushButton("  Save Result...", card_proj)
+        btn_save_res.setIcon(create_studio_icon("save", TEXT_PRIMARY, 13))
+        btn_save_res.setIconSize(QSize(13, 13))
         btn_save_res.clicked.connect(self._on_save_result_dialog)
-        layout.addWidget(btn_save_res)
+        proj_layout.addWidget(btn_save_res)
 
-        btn_export_rep = QPushButton("📄  Export Report...", self)
+        btn_export_rep = QPushButton("  Export Report...", card_proj)
+        btn_export_rep.setIcon(create_studio_icon("export", TEXT_PRIMARY, 13))
+        btn_export_rep.setIconSize(QSize(13, 13))
         btn_export_rep.clicked.connect(self._on_export_report_dialog)
-        layout.addWidget(btn_export_rep)
+        proj_layout.addWidget(btn_export_rep)
 
-        layout.addSpacing(6)
+        layout.addWidget(card_proj)
 
-        # ENHANCEMENT Group
-        lbl_enh = QLabel("ENHANCEMENT", self)
+        # ENHANCEMENT Card (#19212A)
+        card_enh = QFrame(inner)
+        card_enh.setProperty("class", "leftCard")
+        enh_layout = QVBoxLayout(card_enh)
+        enh_layout.setContentsMargins(8, 7, 8, 8)
+        enh_layout.setSpacing(7)
+
+        lbl_enh = QLabel("ENHANCEMENT", card_enh)
         lbl_enh.setProperty("class", "sectionHeader")
-        layout.addWidget(lbl_enh)
+        enh_layout.addWidget(lbl_enh)
 
-        # Sliders: Brightness, Contrast, Saturation, Gamma
-        self._slider_bright, self._lbl_bright = self._create_slider_row("Brightness", -1.0, 1.0, 0.10, 100, layout)
-        self._slider_contrast, self._lbl_contrast = self._create_slider_row("Contrast", 0.0, 3.0, 1.20, 100, layout)
-        self._slider_sat, self._lbl_sat = self._create_slider_row("Saturation", 0.0, 3.0, 1.30, 100, layout)
-        self._slider_gamma, self._lbl_gamma = self._create_slider_row("Gamma", 0.1, 3.0, 1.10, 100, layout)
+        self._slider_bright, self._lbl_bright = self._create_slider_row(
+            "Brightness", -1.00, 1.00, 0.10, scale=100, step=0.05, digits=2, signed=True, parent_layout=enh_layout, param_key="brightness"
+        )
+        self._slider_contrast, self._lbl_contrast = self._create_slider_row(
+            "Contrast", 0.00, 3.00, 1.20, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="contrast"
+        )
+        self._slider_sat, self._lbl_sat = self._create_slider_row(
+            "Saturation", 0.00, 3.00, 1.30, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="saturation"
+        )
+        self._slider_gamma, self._lbl_gamma = self._create_slider_row(
+            "Gamma", 0.10, 3.00, 1.10, scale=100, step=0.05, digits=2, signed=False, parent_layout=enh_layout, param_key="gamma"
+        )
 
-        layout.addSpacing(6)
+        layout.addWidget(card_enh)
 
-        # PRECISION Group
-        lbl_prec = QLabel("PRECISION", self)
+        # PRECISION Card (#19212A)
+        card_prec = QFrame(inner)
+        card_prec.setProperty("class", "leftCard")
+        prec_layout = QVBoxLayout(card_prec)
+        prec_layout.setContentsMargins(8, 7, 8, 8)
+        prec_layout.setSpacing(6)
+
+        lbl_prec = QLabel("PRECISION", card_prec)
         lbl_prec.setProperty("class", "sectionHeader")
-        layout.addWidget(lbl_prec)
+        prec_layout.addWidget(lbl_prec)
 
-        # Mode
-        row_mode = QHBoxLayout()
-        lbl_m = QLabel("Mode", self)
+        prec_grid = QGridLayout()
+        prec_grid.setContentsMargins(0, 0, 0, 0)
+        prec_grid.setHorizontalSpacing(8)
+        prec_grid.setVerticalSpacing(5)
+
+        lbl_m = QLabel("Mode", card_prec)
         lbl_m.setProperty("class", "subHeader")
-        row_mode.addWidget(lbl_m)
-        self._combo_mode = QComboBox(self)
+        self._combo_mode = QComboBox(card_prec)
+        self._combo_mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self._combo_mode.setMinimumContentsLength(10)
+        self._combo_mode.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self._combo_mode.addItems(["Adaptive", "FP32 (Reference)", "FP16 (Emulated)", "Mixed Precision"])
         self._combo_mode.currentIndexChanged.connect(self._on_precision_mode_changed)
-        row_mode.addWidget(self._combo_mode, 1)
-        layout.addLayout(row_mode)
+        prec_grid.addWidget(lbl_m, 0, 0)
+        prec_grid.addWidget(self._combo_mode, 0, 1)
 
-        # Policy
-        row_pol = QHBoxLayout()
-        lbl_p = QLabel("Policy", self)
+        lbl_p = QLabel("Policy", card_prec)
         lbl_p.setProperty("class", "subHeader")
-        row_pol.addWidget(lbl_p)
-        self._combo_policy = QComboBox(self)
-        self._combo_policy.addItems(["Sensitivity-Guided", "30-Seed Random Selection (Research Ablation)"])
+        self._combo_policy = QComboBox(card_prec)
+        self._combo_policy.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self._combo_policy.setMinimumContentsLength(10)
+        self._combo_policy.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self._combo_policy.addItems(["Sensitivity-Guided", "30-Seed Random (Research Ablation)"])
         self._combo_policy.currentIndexChanged.connect(self._on_policy_changed)
-        row_pol.addWidget(self._combo_policy, 1)
-        layout.addLayout(row_pol)
+        prec_grid.addWidget(lbl_p, 1, 0)
+        prec_grid.addWidget(self._combo_policy, 1, 1)
 
-        # Tile Size
-        row_ts = QHBoxLayout()
-        lbl_ts = QLabel("Tile Size", self)
+        lbl_ts = QLabel("Tile Size", card_prec)
         lbl_ts.setProperty("class", "subHeader")
-        row_ts.addWidget(lbl_ts)
-        self._combo_tilesize = QComboBox(self)
+        self._combo_tilesize = QComboBox(card_prec)
+        self._combo_tilesize.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self._combo_tilesize.setMinimumContentsLength(8)
+        self._combo_tilesize.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self._combo_tilesize.addItems(["16 × 16", "32 × 32", "64 × 64", "128 × 128"])
-        self._combo_tilesize.setCurrentIndex(1)  # 32x32
-        row_ts.addWidget(self._combo_tilesize, 1)
-        layout.addLayout(row_ts)
+        self._combo_tilesize.setCurrentIndex(1)
+        prec_grid.addWidget(lbl_ts, 2, 0)
+        prec_grid.addWidget(self._combo_tilesize, 2, 1)
 
-        # Threshold (tau)
-        self._slider_tau, self._lbl_tau = self._create_slider_row("Threshold (τ)", 0.00, 0.20, 0.040, 1000, layout)
+        prec_grid.setColumnStretch(1, 1)
+        prec_layout.addLayout(prec_grid)
 
+        self._slider_tau, self._lbl_tau = self._create_slider_row(
+            "Threshold (τ)", 0.00, 1.00, 0.040, scale=1000, step=0.01, digits=3, signed=False, parent_layout=prec_layout, param_key="threshold"
+        )
+
+        layout.addWidget(card_prec)
         layout.addStretch(1)
 
-        # Primary Action Button: Run Enhancement
-        self._btn_run = QPushButton("▶   Run Enhancement", self)
+        scroll.setWidget(inner)
+        outer_layout.addWidget(scroll, 1)
+
+        # Primary Action Button pinned cleanly at bottom
+        self._btn_run = QPushButton("▶   Run Enhancement", panel)
         self._btn_run.setObjectName("btnPrimary")
         self._btn_run.clicked.connect(self._on_run_enhancement)
-        layout.addWidget(self._btn_run)
+        outer_layout.addWidget(self._btn_run)
 
         return panel
 
-    def _create_slider_row(self, name: str, min_val: float, max_val: float, init_val: float, scale: int, parent_layout: QVBoxLayout) -> Tuple[QSlider, QLabel]:
-        row_header = QHBoxLayout()
-        lbl_name = QLabel(name, self)
-        lbl_name.setProperty("class", "subHeader")
-        row_header.addWidget(lbl_name)
+    def _create_slider_row(
+        self,
+        name: str,
+        min_val: float,
+        max_val: float,
+        init_val: float,
+        scale: int,
+        parent_layout: QVBoxLayout,
+        step: float = 0.05,
+        digits: int = 2,
+        signed: bool = False,
+        param_key: str = "",
+    ) -> Tuple[QSlider, QLabel]:
+        block = QVBoxLayout()
+        block.setContentsMargins(0, 0, 0, 0)
+        block.setSpacing(3)
 
-        fmt = "+.2f" if (name == "Brightness" and init_val >= 0) else (".3f" if "Threshold" in name else ".2f")
-        val_str = f"{init_val:{fmt}}" if not (name == "Brightness" and init_val > 0) else f"+{init_val:.2f}"
-        lbl_val = QLabel(val_str, self)
+        min_int = int(round(min_val * scale))
+        max_int = int(round(max_val * scale))
+        init_int = max(min_int, min(max_int, int(round(init_val * scale))))
+        step_int = max(1, int(round(step * scale)))
+
+        def _fmt_value(raw_int: int) -> str:
+            real_val = raw_int / scale
+            if signed:
+                if abs(real_val) < 1e-9:
+                    return f"+{0.0:.{digits}f}"
+                return f"+{real_val:.{digits}f}" if real_val > 0 else f"{real_val:.{digits}f}"
+            return f"{real_val:.{digits}f}"
+
+        row_header = QHBoxLayout()
+        row_header.setSpacing(4)
+        lbl_name = QLabel(name, self)
+        lbl_name.setFont(studio_font(lbl_name, point_size=9, bold=False))
+        lbl_name.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        row_header.addWidget(lbl_name)
+        row_header.addStretch(1)
+
+        lbl_step = QLabel(f"±{step:.2f}", self)
+        lbl_step.setFont(studio_font(lbl_step, point_size=7, bold=False))
+        lbl_step.setStyleSheet(f"color: {TEXT_MUTED};")
+        lbl_step.setToolTip(f"Adjustment step: {step:.2f} (range {min_val:.2f} to {max_val:.2f})")
+        row_header.addWidget(lbl_step)
+
+        lbl_val = QLabel(_fmt_value(init_int), self)
         lbl_val.setProperty("class", "valBadge")
-        row_header.addWidget(lbl_val, 0, Qt.AlignRight)
-        parent_layout.addLayout(row_header)
+        lbl_val.setMinimumWidth(48)
+        row_header.addWidget(lbl_val)
+        block.addLayout(row_header)
+
+        ctrl_row = QHBoxLayout()
+        ctrl_row.setSpacing(5)
+
+        btn_dec = QToolButton(self)
+        btn_dec.setProperty("class", "stepBtn")
+        btn_dec.setText("−")
+        btn_dec.setFixedSize(20, 20)
+        btn_dec.setToolTip(f"Decrease {name} by {step:.2f}")
+        ctrl_row.addWidget(btn_dec)
 
         slider = QSlider(Qt.Horizontal, self)
-        slider.setRange(int(min_val * scale), int(max_val * scale))
-        slider.setValue(int(init_val * scale))
+        slider.setMinimumWidth(80)
+        slider.setRange(min_int, max_int)
+        slider.setSingleStep(step_int)
+        slider.setPageStep(step_int * 2)
+        slider.setValue(init_int)
+        ctrl_row.addWidget(slider, 1)
 
-        def _on_val_change(v):
-            real_val = v / scale
-            if name == "Brightness":
-                s = f"+{real_val:.2f}" if real_val > 0 else f"{real_val:.2f}"
-            elif "Threshold" in name:
-                s = f"{real_val:.3f}"
-            else:
-                s = f"{real_val:.2f}"
-            lbl_val.setText(s)
+        btn_inc = QToolButton(self)
+        btn_inc.setProperty("class", "stepBtn")
+        btn_inc.setText("+")
+        btn_inc.setFixedSize(20, 20)
+        btn_inc.setToolTip(f"Increase {name} by {step:.2f}")
+        ctrl_row.addWidget(btn_inc)
 
-        slider.valueChanged.connect(_on_val_change)
-        parent_layout.addWidget(slider)
+        block.addLayout(ctrl_row)
+        parent_layout.addLayout(block)
+
+        slider.valueChanged.connect(lambda v: lbl_val.setText(_fmt_value(v)))
+        btn_dec.clicked.connect(lambda: slider.setValue(max(min_int, slider.value() - step_int)))
+        btn_inc.clicked.connect(lambda: slider.setValue(min(max_int, slider.value() + step_int)))
+
+        key = param_key or name.lower()
+        self._param_controls[key] = {
+            "slider": slider,
+            "label": lbl_val,
+            "dec_btn": btn_dec,
+            "inc_btn": btn_inc,
+            "step_label": lbl_step,
+            "min_val": min_val,
+            "max_val": max_val,
+            "step": step,
+            "scale": scale,
+        }
 
         return slider, lbl_val
 
     def _create_center_viewport(self) -> QWidget:
         container = QWidget(self)
+        container.setObjectName("transparentInner")
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # Viewport Toolbar
+        # Viewport Toolbar (#28333D)
         toolbar = QFrame(container)
-        toolbar.setProperty("class", "panelCard")
+        toolbar.setObjectName("viewportToolbar")
+        toolbar.setStyleSheet(
+            f"QFrame#viewportToolbar {{ background-color: {BG_SECONDARY}; border: 1px solid {BORDER_COLOR}; border-radius: 8px; padding: 2px 8px; }}"
+        )
         toolbar.setFixedHeight(40)
         tb_layout = QHBoxLayout(toolbar)
-        tb_layout.setContentsMargins(8, 2, 8, 2)
-        tb_layout.setSpacing(8)
+        tb_layout.setContentsMargins(4, 2, 4, 2)
+        tb_layout.setSpacing(6)
 
         btn_hand = QToolButton(toolbar)
-        btn_hand.setText("✋")
-        btn_hand.setToolTip("Pan Tool")
+        btn_hand.setIcon(create_studio_icon("pan", TEXT_SECONDARY, 15))
+        btn_hand.setIconSize(QSize(15, 15))
+        btn_hand.setMinimumHeight(26)
+        btn_hand.setToolTip("Pan Tool (Drag canvas to pan)")
         tb_layout.addWidget(btn_hand)
 
         btn_zin = QToolButton(toolbar)
-        btn_zin.setText("🔍+")
+        btn_zin.setIcon(create_studio_icon("zoom_in", TEXT_SECONDARY, 15))
+        btn_zin.setIconSize(QSize(15, 15))
+        btn_zin.setMinimumHeight(26)
         btn_zin.setToolTip("Zoom In")
         btn_zin.clicked.connect(lambda: self._viewer.zoom_in())
         tb_layout.addWidget(btn_zin)
 
         btn_zout = QToolButton(toolbar)
-        btn_zout.setText("🔍-")
+        btn_zout.setIcon(create_studio_icon("zoom_out", TEXT_SECONDARY, 15))
+        btn_zout.setIconSize(QSize(15, 15))
+        btn_zout.setMinimumHeight(26)
         btn_zout.setToolTip("Zoom Out")
         btn_zout.clicked.connect(lambda: self._viewer.zoom_out())
         tb_layout.addWidget(btn_zout)
 
-        btn_11 = QPushButton("1:1", toolbar)
-        btn_11.setFixedWidth(36)
+        btn_11 = QToolButton(toolbar)
+        btn_11.setText("1:1")
+        btn_11.setFixedSize(36, 26)
         btn_11.setToolTip("Actual Size (100%)")
         btn_11.clicked.connect(lambda: self._viewer.reset_zoom())
         tb_layout.addWidget(btn_11)
 
         btn_fit = QToolButton(toolbar)
-        btn_fit.setText("⛶")
+        btn_fit.setIcon(create_studio_icon("fit", TEXT_SECONDARY, 15))
+        btn_fit.setIconSize(QSize(15, 15))
+        btn_fit.setMinimumHeight(26)
         btn_fit.setToolTip("Fit to Screen")
         btn_fit.clicked.connect(lambda: self._viewer.fit_to_screen())
         tb_layout.addWidget(btn_fit)
 
         self._lbl_zoom_pct = QLabel("100%", toolbar)
         self._lbl_zoom_pct.setProperty("class", "valBadge")
+        self._lbl_zoom_pct.setFixedHeight(24)
         tb_layout.addWidget(self._lbl_zoom_pct)
 
         tb_layout.addStretch(1)
 
-        # Mode toggles: Split, Original, Enhanced
+        # Exclusive split / enhanced / original mode toggles
+        self._viewer_mode_group = QtWidgets.QButtonGroup(toolbar)
+        self._viewer_mode_group.setExclusive(True)
+
         btn_mode_split = QToolButton(toolbar)
-        btn_mode_split.setText("◫ Split")
+        btn_mode_split.setText("Split")
+        btn_mode_split.setIcon(create_studio_icon("split", TEXT_PRIMARY, 14))
+        btn_mode_split.setIconSize(QSize(14, 14))
+        btn_mode_split.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        btn_mode_split.setMinimumHeight(26)
+        btn_mode_split.setCheckable(True)
+        btn_mode_split.setChecked(True)
         btn_mode_split.setToolTip("Interactive Split View")
         btn_mode_split.clicked.connect(lambda: self._viewer.set_split_mode("split"))
+        self._viewer_mode_group.addButton(btn_mode_split)
         tb_layout.addWidget(btn_mode_split)
 
         btn_mode_enh = QToolButton(toolbar)
-        btn_mode_enh.setText("⬛ Enh.")
+        btn_mode_enh.setText("Enh.")
+        btn_mode_enh.setMinimumHeight(26)
+        btn_mode_enh.setCheckable(True)
         btn_mode_enh.setToolTip("Show Enhanced Only")
         btn_mode_enh.clicked.connect(lambda: self._viewer.set_split_mode("enhanced"))
+        self._viewer_mode_group.addButton(btn_mode_enh)
         tb_layout.addWidget(btn_mode_enh)
 
         btn_mode_orig = QToolButton(toolbar)
-        btn_mode_orig.setText("⬜ Orig.")
+        btn_mode_orig.setText("Orig.")
+        btn_mode_orig.setMinimumHeight(26)
+        btn_mode_orig.setCheckable(True)
         btn_mode_orig.setToolTip("Show Original Only")
         btn_mode_orig.clicked.connect(lambda: self._viewer.set_split_mode("original"))
+        self._viewer_mode_group.addButton(btn_mode_orig)
         tb_layout.addWidget(btn_mode_orig)
 
         layout.addWidget(toolbar)
 
-        # Central Image Viewer
+        # Central Near-Black Image Canvas
         self._viewer = SplitImageViewer(container)
+        self._viewer.zoom_changed.connect(lambda z: self._lbl_zoom_pct.setText(f"{int(round(z * 100))}%"))
         layout.addWidget(self._viewer, 1)
 
-        # Bottom Filmstrip Carousel
-        self._filmstrip = FilmstripCarousel(container)
+        # Bottom Filmstrip Anchored in Charcoal-to-Black Gradient (#151B23 -> #080B10)
+        filmstrip_frame = QFrame(container)
+        filmstrip_frame.setObjectName("bottomFilmstripRegion")
+        fs_layout = QVBoxLayout(filmstrip_frame)
+        fs_layout.setContentsMargins(2, 0, 2, 0)
+        fs_layout.setSpacing(0)
+
+        self._filmstrip = FilmstripCarousel(filmstrip_frame)
         self._filmstrip.image_selected.connect(self._on_image_selected)
-        layout.addWidget(self._filmstrip)
+        fs_layout.addWidget(self._filmstrip)
+        layout.addWidget(filmstrip_frame)
 
         return container
 
     def _create_right_sidebar(self) -> QWidget:
         panel = QFrame(self)
         panel.setProperty("class", "panelCard")
-        panel.setFixedWidth(410)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        panel.setMinimumWidth(405)
+        panel.setMaximumWidth(465)
+        panel.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+
+        outer_layout = QVBoxLayout(panel)
+        outer_layout.setContentsMargins(8, 8, 8, 8)
+        outer_layout.setSpacing(8)
 
         # Top Sub-Tabs: Sensitivity, Precision Map, Difference, Histogram
         subtab_layout = QHBoxLayout()
         subtab_layout.setSpacing(4)
-        self._subtab_group = QtWidgets.QButtonGroup(self)
+        self._subtab_group = QtWidgets.QButtonGroup(panel)
 
         subtabs = ["Sensitivity", "Precision Map", "Difference", "Histogram"]
         for i, st in enumerate(subtabs):
@@ -2173,85 +2846,91 @@ class MirageStudioMainWindow(QMainWindow):
             self._subtab_group.addButton(btn, i)
             subtab_layout.addWidget(btn)
 
-        layout.addLayout(subtab_layout)
+        outer_layout.addLayout(subtab_layout)
 
-        # Heatmap / Overlay Viewport
+        # Expandable Overlay Viewport (#090C10) absorbs vertical headroom so data cards stay tight
         self._overlay_viewer = HeatmapOverlayViewer(panel)
-        self._overlay_viewer.setFixedHeight(140)
-        layout.addWidget(self._overlay_viewer)
+        self._overlay_viewer.setMinimumHeight(140)
+        self._overlay_viewer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        outer_layout.addWidget(self._overlay_viewer, 1)
 
-        # Row 1: Tile Allocation & Key Results
+        # Middle Row: Enlarged Tile Allocation + 6-Metric Key Results (Compact Fit)
         row1 = QHBoxLayout()
         row1.setSpacing(8)
 
-        # Card: Tile Allocation
         card_alloc = QFrame(panel)
         card_alloc.setProperty("class", "subCard")
         alloc_layout = QVBoxLayout(card_alloc)
-        alloc_layout.setContentsMargins(6, 6, 6, 6)
+        alloc_layout.setContentsMargins(8, 7, 8, 7)
         alloc_layout.setSpacing(4)
         lbl_alloc = QLabel("TILE ALLOCATION", card_alloc)
         lbl_alloc.setProperty("class", "sectionHeader")
         alloc_layout.addWidget(lbl_alloc)
-        self._donut_chart = DonutChartWidget(card_alloc)
+        self._donut_chart = DonutChartWidget(card_alloc, hole_bg=BG_SUBCARD)
+        self._donut_chart.setFixedHeight(130)
         alloc_layout.addWidget(self._donut_chart)
-        row1.addWidget(card_alloc, 1)
+        row1.addWidget(card_alloc, 10)
 
-        # Card: Key Results
         card_results = QFrame(panel)
         card_results.setProperty("class", "subCard")
         res_layout = QVBoxLayout(card_results)
-        res_layout.setContentsMargins(6, 6, 6, 6)
-        res_layout.setSpacing(4)
+        res_layout.setContentsMargins(8, 7, 8, 7)
+        res_layout.setSpacing(3)
         lbl_res = QLabel("KEY RESULTS (vs FP32)", card_results)
         lbl_res.setProperty("class", "sectionHeader")
+        lbl_res.setStyleSheet("letter-spacing: 0.4px; font-size: 9px;")
         res_layout.addWidget(lbl_res)
 
         self._lbl_psnr = self._create_metric_row("PSNR", "-- dB", res_layout)
         self._lbl_ssim = self._create_metric_row("SSIM", "--", res_layout)
-        self._lbl_ciede = self._create_metric_row("ΔE00 (mean)", "--", res_layout)
-        self._lbl_l2 = self._create_metric_row("Rel. L2 Error", "-- %", res_layout)
-        row1.addWidget(card_results, 1)
+        self._lbl_ciede = self._create_metric_row("Mean ΔE00", "--", res_layout)
+        self._lbl_l2 = self._create_metric_row("Rel. L2 Err", "-- %", res_layout)
+        self._lbl_mae = self._create_metric_row("MAE", "--", res_layout)
+        self._lbl_rmse = self._create_metric_row("RMSE", "--", res_layout)
+        res_layout.addStretch(1)
+        row1.addWidget(card_results, 11)
 
-        layout.addLayout(row1)
+        outer_layout.addLayout(row1, 0)
 
-        # Row 2: Runtime & Hardware + System Info
+        # Bottom Row: Compact Runtime & Hardware + Compact System Info
         row2 = QHBoxLayout()
         row2.setSpacing(8)
 
-        # Card: Runtime & Hardware Bar Chart
         card_perf = QFrame(panel)
         card_perf.setProperty("class", "subCard")
         perf_layout = QVBoxLayout(card_perf)
-        perf_layout.setContentsMargins(6, 6, 6, 6)
+        perf_layout.setContentsMargins(8, 7, 8, 7)
         perf_layout.setSpacing(4)
         lbl_perf = QLabel("RUNTIME & HARDWARE", card_perf)
         lbl_perf.setProperty("class", "sectionHeader")
+        lbl_perf.setStyleSheet("letter-spacing: 0.4px; font-size: 9px;")
         perf_layout.addWidget(lbl_perf)
         self._perf_chart = PerformanceBarChart(card_perf)
+        self._perf_chart.setFixedHeight(92)
         perf_layout.addWidget(self._perf_chart)
-        row2.addWidget(card_perf, 1)
+        row2.addWidget(card_perf, 12)
 
-        # Card: System Info
         card_sys = QFrame(panel)
         card_sys.setProperty("class", "subCard")
         sys_layout = QVBoxLayout(card_sys)
-        sys_layout.setContentsMargins(6, 6, 6, 6)
+        sys_layout.setContentsMargins(8, 7, 8, 7)
         sys_layout.setSpacing(4)
         lbl_sys = QLabel("SYSTEM INFO", card_sys)
         lbl_sys.setProperty("class", "sectionHeader")
         sys_layout.addWidget(lbl_sys)
 
         self._lbl_cpu = QLabel("CPU: Detecting...", card_sys)
-        self._lbl_cpu.setFont(QFont("sans-serif", 8, QFont.Bold))
+        self._lbl_cpu.setFont(studio_font(self._lbl_cpu, point_size=8, bold=True))
+        self._lbl_cpu.setStyleSheet(f"color: {TEXT_PRIMARY};")
         sys_layout.addWidget(self._lbl_cpu)
 
         self._lbl_avx2 = self._create_sys_row("AVX2", False, sys_layout)
         self._lbl_fma = self._create_sys_row("FMA", False, sys_layout)
         self._lbl_f16c = self._create_sys_row("F16C", False, sys_layout)
-        row2.addWidget(card_sys, 1)
+        sys_layout.addStretch(1)
+        row2.addWidget(card_sys, 9)
 
-        layout.addLayout(row2)
+        outer_layout.addLayout(row2, 0)
 
         return panel
 
@@ -2261,8 +2940,9 @@ class MirageStudioMainWindow(QMainWindow):
         lbl.setProperty("class", "subHeader")
         row.addWidget(lbl)
         val = QLabel(init_val, self)
-        val.setFont(QFont("sans-serif", 9, QFont.Bold))
-        val.setAlignment(Qt.AlignRight)
+        val.setFont(studio_font(val, point_size=9, bold=True))
+        val.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(val)
         parent_layout.addLayout(row)
         return val
@@ -2274,7 +2954,7 @@ class MirageStudioMainWindow(QMainWindow):
         row.addWidget(lbl)
         val = QLabel("✓" if enabled else "✗", self)
         val.setStyleSheet(f"color: {ACCENT_GREEN if enabled else ACCENT_RED}; font-weight: bold;")
-        val.setAlignment(Qt.AlignRight)
+        val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         row.addWidget(val)
         parent_layout.addLayout(row)
         return val
@@ -2282,14 +2962,18 @@ class MirageStudioMainWindow(QMainWindow):
     def _create_status_bar(self) -> QStatusBar:
         sb = QStatusBar(self)
         self._status_icon = QLabel("● READY", self)
-        self._status_icon.setStyleSheet(f"color: {ACCENT_GREEN}; font-weight: bold; font-size: 10px;")
+        self._status_icon.setFont(studio_font(self._status_icon, point_size=9, bold=True))
+        self._status_icon.setStyleSheet(f"color: {ACCENT_GREEN}; padding-right: 6px;")
         sb.addWidget(self._status_icon)
 
         self._status_text = QLabel("Ready for adaptive enhancement | Select image or parameters to execute", self)
+        self._status_text.setFont(studio_font(self._status_text, point_size=9, bold=False))
+        self._status_text.setStyleSheet(f"color: {TEXT_SECONDARY};")
         sb.addWidget(self._status_text, 1)
 
         lbl_version = QLabel("MIRAGE v0.9.0-ALPHA", self)
-        lbl_version.setStyleSheet(f"color: {TEXT_MUTED}; font-weight: 600; font-size: 10px;")
+        lbl_version.setFont(studio_font(lbl_version, point_size=8, bold=False))
+        lbl_version.setStyleSheet(f"color: {TEXT_MUTED};")
         sb.addPermanentWidget(lbl_version)
         return sb
 
@@ -2298,23 +2982,35 @@ class MirageStudioMainWindow(QMainWindow):
     # -----------------------------------------------------------------------
     def _create_analyze_view(self) -> QWidget:
         view = QWidget(self)
+        view.setObjectName("workspacePage")
         layout = QVBoxLayout(view)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(10)
 
-        lbl_header = QLabel("Sensitivity Analyzer & Tile Feature Breakdown", view)
-        lbl_header.setFont(QFont("sans-serif", 14, QFont.Bold))
-        layout.addWidget(lbl_header)
+        hdr_card = QFrame(view)
+        hdr_card.setProperty("class", "panelCard")
+        hdr_layout = QVBoxLayout(hdr_card)
+        hdr_layout.setContentsMargins(14, 10, 14, 10)
+        hdr_layout.setSpacing(4)
+
+        lbl_header = QLabel("Sensitivity Analyzer & Tile Feature Breakdown", hdr_card)
+        lbl_header.setFont(studio_font(lbl_header, point_size=14, bold=True))
+        lbl_header.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        hdr_layout.addWidget(lbl_header)
 
         desc = QLabel(
             "Inspect tile-based sensitivity scores computed across color variation, gradient energy, "
-            "luminance variance, and spatial frequency. Guidance threshold determines FP32/FP16 boundary.",
-            view,
+            "luminance variance, and spatial frequency. Guidance threshold determines the FP32 (blue) / FP16 (green) boundary.",
+            hdr_card,
         )
-        desc.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
-        layout.addWidget(desc)
+        desc.setWordWrap(True)
+        desc.setFont(studio_font(desc, point_size=9, bold=False))
+        desc.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        hdr_layout.addWidget(desc)
+        layout.addWidget(hdr_card)
 
         self._analyze_table = QTableWidget(view)
+        self._analyze_table.setAlternatingRowColors(True)
         self._analyze_table.setColumnCount(8)
         self._analyze_table.setHorizontalHeaderLabels([
             "Tile ID", "X", "Y", "Width", "Height", "Partial", "Precision", "Sensitivity Score"
@@ -2326,28 +3022,42 @@ class MirageStudioMainWindow(QMainWindow):
 
     def _create_benchmark_view(self) -> QWidget:
         view = QWidget(self)
+        view.setObjectName("workspacePage")
         layout = QVBoxLayout(view)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(10)
 
-        lbl_header = QLabel("Hardware Microbenchmarks & Performance Evaluation", view)
-        lbl_header.setFont(QFont("sans-serif", 14, QFont.Bold))
-        layout.addWidget(lbl_header)
+        hdr_card = QFrame(view)
+        hdr_card.setProperty("class", "panelCard")
+        hdr_layout = QVBoxLayout(hdr_card)
+        hdr_layout.setContentsMargins(14, 10, 14, 10)
+        hdr_layout.setSpacing(4)
+
+        lbl_header = QLabel("Hardware Microbenchmarks & Performance Evaluation", hdr_card)
+        lbl_header.setFont(studio_font(lbl_header, point_size=14, bold=True))
+        lbl_header.setStyleSheet(f"color: {TEXT_PRIMARY};")
+        hdr_layout.addWidget(lbl_header)
 
         desc = QLabel(
             "Evaluation of AVX2 vectorization, scalar fallbacks, and emulated FP16 arithmetic. "
             "Data loaded directly from verified hardware performance runs in benchmarks/results/benchmark_results.csv.",
-            view,
+            hdr_card,
         )
-        desc.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
-        layout.addWidget(desc)
+        desc.setWordWrap(True)
+        desc.setFont(studio_font(desc, point_size=9, bold=False))
+        desc.setStyleSheet(f"color: {TEXT_SECONDARY};")
+        hdr_layout.addWidget(desc)
+        layout.addWidget(hdr_card)
 
         self._bench_table = QTableWidget(view)
-        self._bench_table.setColumnCount(6)
+        self._bench_table.setAlternatingRowColors(True)
+        self._bench_table.setColumnCount(8)
         self._bench_table.setHorizontalHeaderLabels([
-            "Benchmark Name", "Resolution", "Backend", "Precision", "Time (ms)", "Throughput (MPix/s)"
+            "Operation", "Resolution", "Backend", "Precision", "Median (ms)", "Throughput (MPix/s)", "IPC", "Cache Miss (%)"
         ])
         self._bench_table.horizontalHeader().setStretchLastSection(True)
+        self._bench_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        self._bench_table.horizontalHeader().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self._bench_table, 1)
 
         self._load_benchmark_csv()
@@ -2701,8 +3411,9 @@ class MirageStudioMainWindow(QMainWindow):
 
     def _create_results_view(self) -> QWidget:
         view = QWidget(self)
+        view.setObjectName("workspacePage")
         outer = QVBoxLayout(view)
-        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setContentsMargins(16, 14, 16, 14)
         outer.setSpacing(0)
 
         self._results_stack = QStackedWidget(view)
@@ -2710,6 +3421,7 @@ class MirageStudioMainWindow(QMainWindow):
 
         # Page 0: Empty State before any successful backend execution
         empty_page = QWidget(view)
+        empty_page.setObjectName("transparentInner")
         empty_layout = QVBoxLayout(empty_page)
         empty_layout.setAlignment(Qt.AlignCenter)
 
@@ -2757,6 +3469,7 @@ class MirageStudioMainWindow(QMainWindow):
 
         # Page 1: Dynamic Latest-Execution Results Dashboard
         dash_page = QWidget(view)
+        dash_page.setObjectName("transparentInner")
         dash_layout = QVBoxLayout(dash_page)
         dash_layout.setContentsMargins(0, 0, 0, 0)
         dash_layout.setSpacing(8)
@@ -2769,6 +3482,7 @@ class MirageStudioMainWindow(QMainWindow):
         hdr_text_col.setSpacing(2)
         lbl_dash_hdr = QLabel("Latest Enhancement Execution Results", dash_page)
         lbl_dash_hdr.setFont(studio_font(lbl_dash_hdr, point_size=13, bold=True))
+        lbl_dash_hdr.setStyleSheet(f"color: {TEXT_PRIMARY};")
         hdr_text_col.addWidget(lbl_dash_hdr)
 
         self._res_header_meta = QLabel("", dash_page)
@@ -2777,17 +3491,23 @@ class MirageStudioMainWindow(QMainWindow):
         hdr_text_col.addWidget(self._res_header_meta)
         hdr_row.addLayout(hdr_text_col, 1)
 
-        btn_save_img = QPushButton("💾  Save Enhanced Image...", dash_page)
+        btn_save_img = QPushButton(" Save Enhanced Image...", dash_page)
+        btn_save_img.setIcon(create_studio_icon("save", TEXT_PRIMARY, 13))
+        btn_save_img.setIconSize(QSize(13, 13))
         btn_save_img.setFont(studio_font(btn_save_img, point_size=8, bold=False))
         btn_save_img.clicked.connect(self._on_save_result_dialog)
         hdr_row.addWidget(btn_save_img)
 
-        btn_export_json = QPushButton("📄  Export Report...", dash_page)
+        btn_export_json = QPushButton(" Export Report...", dash_page)
+        btn_export_json.setIcon(create_studio_icon("export", TEXT_PRIMARY, 13))
+        btn_export_json.setIconSize(QSize(13, 13))
         btn_export_json.setFont(studio_font(btn_export_json, point_size=8, bold=False))
         btn_export_json.clicked.connect(self._on_export_report_dialog)
         hdr_row.addWidget(btn_export_json)
 
-        btn_save_viz = QPushButton("🖼  Save Visualizations...", dash_page)
+        btn_save_viz = QPushButton(" Save Visualizations...", dash_page)
+        btn_save_viz.setIcon(create_studio_icon("layers", TEXT_PRIMARY, 13))
+        btn_save_viz.setIconSize(QSize(13, 13))
         btn_save_viz.setFont(studio_font(btn_save_viz, point_size=8, bold=False))
         btn_save_viz.clicked.connect(self._on_save_visualizations_dialog)
         hdr_row.addWidget(btn_save_viz)
@@ -2806,26 +3526,50 @@ class MirageStudioMainWindow(QMainWindow):
         comp_layout.setSpacing(6)
 
         comp_tb = QHBoxLayout()
-        comp_tb.setSpacing(5)
+        comp_tb.setSpacing(4)
         lbl_comp = QLabel("IMAGE COMPARISON", comp_card)
         lbl_comp.setProperty("class", "sectionHeader")
         lbl_comp.setFont(studio_font(lbl_comp, point_size=9, bold=True))
         comp_tb.addWidget(lbl_comp)
         comp_tb.addStretch(1)
 
-        for label, cb in [
-            ("🔍+", lambda: self._res_viewer.zoom_in()),
-            ("🔍-", lambda: self._res_viewer.zoom_out()),
-            ("1:1", lambda: self._res_viewer.reset_zoom()),
-            ("⛶ Fit", lambda: self._res_viewer.fit_to_screen()),
-            ("◫ Split", lambda: self._res_viewer.set_split_mode("split")),
-            ("⬛ Enh.", lambda: self._res_viewer.set_split_mode("enhanced")),
-            ("⬜ Orig.", lambda: self._res_viewer.set_split_mode("original")),
-        ]:
-            tb_btn = QToolButton(comp_card)
-            tb_btn.setText(label)
-            tb_btn.clicked.connect(cb)
-            comp_tb.addWidget(tb_btn)
+        btn_res_zin = QToolButton(comp_card)
+        btn_res_zin.setIcon(create_studio_icon("zoom_in", TEXT_SECONDARY, 13))
+        btn_res_zin.setIconSize(QSize(13, 13))
+        btn_res_zin.setToolTip("Zoom In")
+        btn_res_zin.clicked.connect(lambda: self._res_viewer.zoom_in())
+        comp_tb.addWidget(btn_res_zin)
+
+        btn_res_zout = QToolButton(comp_card)
+        btn_res_zout.setIcon(create_studio_icon("zoom_out", TEXT_SECONDARY, 13))
+        btn_res_zout.setIconSize(QSize(13, 13))
+        btn_res_zout.setToolTip("Zoom Out")
+        btn_res_zout.clicked.connect(lambda: self._res_viewer.zoom_out())
+        comp_tb.addWidget(btn_res_zout)
+
+        btn_res_11 = QToolButton(comp_card)
+        btn_res_11.setText("1:1")
+        btn_res_11.setToolTip("Actual Size (100%)")
+        btn_res_11.clicked.connect(lambda: self._res_viewer.reset_zoom())
+        comp_tb.addWidget(btn_res_11)
+
+        btn_res_fit = QToolButton(comp_card)
+        btn_res_fit.setIcon(create_studio_icon("fit", TEXT_SECONDARY, 13))
+        btn_res_fit.setIconSize(QSize(13, 13))
+        btn_res_fit.setToolTip("Fit to Screen")
+        btn_res_fit.clicked.connect(lambda: self._res_viewer.fit_to_screen())
+        comp_tb.addWidget(btn_res_fit)
+
+        res_mode_grp = QtWidgets.QButtonGroup(comp_card)
+        res_mode_grp.setExclusive(True)
+        for m_label, m_mode, is_def in [("Split", "split", True), ("Enh.", "enhanced", False), ("Orig.", "original", False)]:
+            m_btn = QToolButton(comp_card)
+            m_btn.setText(m_label)
+            m_btn.setCheckable(True)
+            m_btn.setChecked(is_def)
+            m_btn.clicked.connect(lambda checked=False, md=m_mode: self._res_viewer.set_split_mode(md))
+            res_mode_grp.addButton(m_btn)
+            comp_tb.addWidget(m_btn)
 
         comp_layout.addLayout(comp_tb)
 
@@ -2854,8 +3598,9 @@ class MirageStudioMainWindow(QMainWindow):
         # Right Analytics Area (Compact cards so Sections B, C, D all appear cleanly without scrolling at 1340x840)
         right_scroll = QScrollArea(dash_page)
         right_scroll.setWidgetResizable(True)
-        right_scroll.setMinimumWidth(490)
+        right_scroll.setMinimumWidth(480)
         right_container = QWidget()
+        right_container.setObjectName("transparentInner")
         right_layout = QVBoxLayout(right_container)
         right_layout.setContentsMargins(0, 0, 2, 0)
         right_layout.setSpacing(8)
@@ -2900,7 +3645,7 @@ class MirageStudioMainWindow(QMainWindow):
 
         self._res_lbl_ref_note = QLabel("vs FP32 Reference Output", card_qm)
         self._res_lbl_ref_note.setFont(studio_font(self._res_lbl_ref_note, point_size=7, bold=False))
-        self._res_lbl_ref_note.setStyleSheet(f"color: {ACCENT_PURPLE_LIGHT}; margin-bottom: 2px;")
+        self._res_lbl_ref_note.setStyleSheet(f"color: {ACCENT_BLUE_LIGHT}; margin-bottom: 2px;")
         self._res_lbl_ref_note.setWordWrap(True)
         qm_layout.addWidget(self._res_lbl_ref_note)
 
@@ -2928,7 +3673,7 @@ class MirageStudioMainWindow(QMainWindow):
         lbl_vis.setFont(studio_font(lbl_vis, point_size=9, bold=True))
         vis_layout.addWidget(lbl_vis)
 
-        self._res_donut = DonutChartWidget(card_vis)
+        self._res_donut = DonutChartWidget(card_vis, hole_bg=BG_SECONDARY)
         self._res_donut.setFixedHeight(86)
         vis_layout.addWidget(self._res_donut)
 
@@ -2942,7 +3687,9 @@ class MirageStudioMainWindow(QMainWindow):
         lbl_hm.setProperty("class", "subHeader")
         lbl_hm.setFont(studio_font(lbl_hm, point_size=8, bold=True))
         hm_col.addWidget(lbl_hm)
-        self._res_heatmap_preview = ResultImagePreview("No heatmap generated", show_turbo_bar=True, parent=card_vis)
+        self._res_heatmap_preview = ResultImagePreview(
+            "No heatmap generated", show_turbo_bar=True, parent=card_vis, canvas_bg=BG_MAIN, border_color=BORDER_COLOR
+        )
         self._res_heatmap_preview.setMinimumHeight(170)
         hm_col.addWidget(self._res_heatmap_preview, 1)
         lbl_hm_leg = QLabel("TURBO: 0.0 Low → 1.0 High", card_vis)
@@ -2958,7 +3705,9 @@ class MirageStudioMainWindow(QMainWindow):
         lbl_pm.setProperty("class", "subHeader")
         lbl_pm.setFont(studio_font(lbl_pm, point_size=8, bold=True))
         pm_col.addWidget(lbl_pm)
-        self._res_precision_preview = ResultImagePreview("No precision map generated", show_turbo_bar=False, parent=card_vis)
+        self._res_precision_preview = ResultImagePreview(
+            "No precision map generated", show_turbo_bar=False, parent=card_vis, canvas_bg=BG_MAIN, border_color=BORDER_COLOR
+        )
         self._res_precision_preview.setMinimumHeight(170)
         pm_col.addWidget(self._res_precision_preview, 1)
         lbl_pm_leg = QLabel(
@@ -2998,6 +3747,9 @@ class MirageStudioMainWindow(QMainWindow):
         mode = self._combo_mode.currentText()
         is_adaptive = "Adaptive" in mode
         self._slider_tau.setEnabled(is_adaptive)
+        if hasattr(self, "_param_controls") and "threshold" in self._param_controls:
+            self._param_controls["threshold"]["dec_btn"].setEnabled(is_adaptive)
+            self._param_controls["threshold"]["inc_btn"].setEnabled(is_adaptive)
         self._combo_tilesize.setEnabled(is_adaptive or "Mixed" in mode)
         self._combo_policy.setEnabled(is_adaptive)
 
@@ -3065,10 +3817,31 @@ class MirageStudioMainWindow(QMainWindow):
                 saved_files.append(Path(pm_dest).name)
             self._status_text.setText(f"Saved visualizations to {dest_dir}: {', '.join(saved_files)}")
 
+    def _on_open_settings_dialog(self) -> None:
+        has_code_font = any(
+            f.strip().upper() in {"CODE", "CODE REGULAR", "CODE BOLD", "CODE LIGHT"}
+            for f in QFontDatabase.families()
+        )
+        font_status = (
+            "CODE Bold / CODE Regular (Active)"
+            if has_code_font
+            else "Fallback ('Fira Code' / 'JetBrains Mono') — CODE font files not installed in assets/fonts/"
+        )
+        info_text = (
+            f"<b>Mirage Binary:</b> {self._mirage_bin or 'Not found'}<br>"
+            f"<b>Experiments Binary:</b> {self._exp_bin or 'Not found'}<br>"
+            f"<b>CPU / SIMD:</b> {self._lbl_cpu.text().replace('CPU: ', '')} "
+            f"(AVX2={self._lbl_avx2.text()}, FMA={self._lbl_fma.text()}, F16C={self._lbl_f16c.text()})<br>"
+            f"<b>Typography:</b> {font_status}<br>"
+            f"<b>Workspace Root:</b> {PROJECT_ROOT}"
+        )
+        QtWidgets.QMessageBox.information(self, "Mirage Studio Settings & Diagnostics", info_text)
+
     def _on_image_selected(self, image_path: str) -> None:
         self._active_image_path = image_path
         self._viewer.set_images(image_path, image_path, "Input")
         self._viewer.fit_to_screen()
+        self._overlay_viewer.set_source_images(image_path, "")
         self._status_text.setText(f"Loaded {Path(image_path).name} | Ready to enhance")
 
     # -----------------------------------------------------------------------
@@ -3445,17 +4218,37 @@ class MirageStudioMainWindow(QMainWindow):
         if not csv_path.exists():
             return
         try:
-            with open(csv_path, "r") as f:
-                lines = [line.strip().split(",") for line in f if line.strip()]
-            if not lines:
+            with open(csv_path, "r", newline="") as f:
+                rows = list(csv.DictReader(f))
+            if not rows:
                 return
-            headers = lines[0]
-            rows = lines[1:]
             self._bench_table.setRowCount(len(rows))
             for r_idx, row in enumerate(rows):
-                for c_idx, val in enumerate(row[:6]):
+                w = row.get("Width", "")
+                h = row.get("Height", "")
+                res_name = row.get("Resolution", "")
+                res_disp = f"{res_name} ({w}×{h})" if (w and h) else res_name
+                prec_val = row.get("PrecisionMode", "")
+                cells = [
+                    row.get("Operation", ""),
+                    res_disp,
+                    row.get("Backend", ""),
+                    prec_val,
+                    row.get("RuntimeMedianMs", ""),
+                    row.get("ThroughputMPixS", ""),
+                    row.get("IPC", ""),
+                    row.get("CacheMissRatePct", ""),
+                ]
+                for c_idx, val in enumerate(cells):
                     item = QTableWidgetItem(val)
-                    item.setTextAlignment(Qt.AlignCenter)
+                    item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter if c_idx == 0 else Qt.AlignCenter)
+                    if c_idx == 3:
+                        if "FP32" in val:
+                            item.setForeground(QColor(ACCENT_BLUE))
+                        elif "FP16" in val:
+                            item.setForeground(QColor(ACCENT_GREEN))
+                        elif "Adaptive" in val:
+                            item.setForeground(QColor(ACCENT_BLUE_LIGHT))
                     self._bench_table.setItem(r_idx, c_idx, item)
         except Exception:
             pass
@@ -3624,11 +4417,16 @@ class MirageStudioMainWindow(QMainWindow):
         self._last_result_heatmap_path = resolved_hm
         self._last_result_precision_path = resolved_pm
 
-        # Update Enhance Viewer & Overlays
+        # Update Enhance Viewer & Overlays (Heatmaps, Precision Map, Real Difference & Histogram)
         mode_display = f"Adaptive (τ = {tau_val:.2f})" if mode_arg == "adaptive" else mode_arg.upper()
         self._viewer.set_images(resolved_input, resolved_output, mode_display)
 
-        self._overlay_viewer.set_overlay_images(resolved_hm, resolved_pm)
+        self._overlay_viewer.set_overlay_images(
+            resolved_hm,
+            resolved_pm,
+            original_path=resolved_input,
+            enhanced_path=resolved_output,
+        )
 
         # Update Tile Allocation Donut
         alloc = data.get("tile_allocation", {})
@@ -3660,23 +4458,29 @@ class MirageStudioMainWindow(QMainWindow):
         else:
             self._analyze_table.setRowCount(0)
 
-        # Update Enhance Sidebar Key Results
+        # Update Enhance Sidebar Key Results (All 6 Compact Metrics)
         qm = data.get("quality_metrics_vs_fp32_reference")
         if qm:
             psnr_val = qm.get("psnr_db", 0.0)
             ssim_val = qm.get("ssim", 0.0)
             ciede_val = qm.get("mean_ciede2000", 0.0)
             l2_val = qm.get("relative_l2_error", 0.0) * 100.0
+            mae_val = qm.get("mean_absolute_error", 0.0)
+            rmse_val = qm.get("root_mean_square_error", 0.0)
 
             self._lbl_psnr.setText(f"{psnr_val:.2f} dB" if psnr_val < 99 else "> 100 dB")
             self._lbl_ssim.setText(f"{ssim_val:.4f}")
             self._lbl_ciede.setText(f"{ciede_val:.4f}")
             self._lbl_l2.setText(f"{l2_val:.4f} %")
+            self._lbl_mae.setText(f"{mae_val:.6f}")
+            self._lbl_rmse.setText(f"{rmse_val:.6f}")
         else:
             self._lbl_psnr.setText("∞ (Reference)")
             self._lbl_ssim.setText("1.0000")
             self._lbl_ciede.setText("0.0000")
             self._lbl_l2.setText("0.0000 %")
+            self._lbl_mae.setText("0.000000")
+            self._lbl_rmse.setText("0.000000")
 
         # Update Hardware Runtime Bar Chart
         rt = data.get("runtime", {})
@@ -3773,7 +4577,7 @@ class MirageStudioMainWindow(QMainWindow):
 
         exec_ms = rt.get("measured_pipeline_ms", 0.0)
         self._res_lbl_runtime.setText(f"{exec_ms:.2f} ms")
-        self._res_lbl_runtime.setStyleSheet(f"color: {ACCENT_PURPLE_LIGHT}; font-weight: bold;")
+        self._res_lbl_runtime.setStyleSheet(f"color: {ACCENT_BLUE_LIGHT}; font-weight: bold;")
 
         # Quality Metrics vs FP32 Reference (Section C)
         if qm:
